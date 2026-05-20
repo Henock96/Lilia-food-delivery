@@ -1,0 +1,134 @@
+{
+  "project_info": {
+    "project_number": "79838517894",
+    "project_id": "lilia-app-d8f6f",
+    "storage_bucket": "lilia-app-d8f6f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:79838517894:android:635d1cc397fe3d61c08f07",
+        "android_client_info": {
+          "package_name": "com.dreesis.lilia.lilia_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "79838517894-1s0str3cead49hulu7msrr2jdfsed18m.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.dreesis.lilia.lilia_app",
+            "certificate_hash": "d3e1b38c93cccddfebe929171d0dcc9f3851afbc"
+          }
+        },
+        {
+          "client_id": "79838517894-r62q852v04iaork1ctpli6uqo2jm74u5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.dreesis.lilia.lilia_app",
+            "certificate_hash": "966060a04094c92903972c8e58c512497727e48a"
+          }
+        },
+        {
+          "client_id": "79838517894-m230oii5h7jh47da9st180kgmt63dh6g.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBVTMt0Gv2t0D6kUycVVhB4tgWn-IMQa2Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "79838517894-m230oii5h7jh47da9st180kgmt63dh6g.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "79838517894-1sq81lg479vdser05i7f9r3m9ef1gpqr.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.dreesis.liliaFoodDelivery"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:79838517894:android:9b213b9c52dbe413c08f07",
+        "android_client_info": {
+          "package_name": "com.dreesis.lilia_admin"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "79838517894-m230oii5h7jh47da9st180kgmt63dh6g.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBVTMt0Gv2t0D6kUycVVhB4tgWn-IMQa2Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "79838517894-m230oii5h7jh47da9st180kgmt63dh6g.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "79838517894-1sq81lg479vdser05i7f9r3m9ef1gpqr.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.dreesis.liliaFoodDelivery"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:79838517894:android:ef3d51aaee12d5f1c08f07",
+        "android_client_info": {
+          "package_name": "com.dreesis.lilia_food_delivery"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "79838517894-m230oii5h7jh47da9st180kgmt63dh6g.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBVTMt0Gv2t0D6kUycVVhB4tgWn-IMQa2Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "79838517894-m230oii5h7jh47da9st180kgmt63dh6g.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "79838517894-1sq81lg479vdser05i7f9r3m9ef1gpqr.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.dreesis.liliaFoodDelivery"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

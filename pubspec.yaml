@@ -1,0 +1,71 @@
+name: lilia_food_delivery
+description: "Application livreur Lilia Food — Brazzaville, Congo."
+publish_to: 'none'
+
+version: 1.0.1+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  google_fonts: ^8.1.0
+
+  # Firebase
+  firebase_core: ^4.7.0
+  firebase_auth: ^6.4.0
+  firebase_messaging: ^16.2.0
+  firebase_analytics: ^12.3.0
+
+  # State management
+  flutter_riverpod: ^3.3.1
+  riverpod_annotation: ^4.0.0
+
+  # Navigation
+  go_router: ^17.2.3
+
+  # HTTP
+  http: ^1.6.0
+
+  # Local storage
+  shared_preferences: ^2.5.5
+
+  # Notifications
+  flutter_local_notifications: ^21.0.0
+
+  # UI
+  iconsax: ^0.0.8
+
+  # Maps & Location
+  google_maps_flutter: ^2.10.0
+  geolocator: ^13.0.4
+  permission_handler: ^11.4.0
+
+  # WebSocket tracking
+  socket_io_client: ^3.1.2
+
+  # Utils
+  intl: ^0.20.2
+  url_launcher: ^6.3.1
+  flutter_launcher_icons: ^0.14.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.15.0
+  riverpod_generator: ^4.0.0+1
+  riverpod_lint: ^3.1.0
+
+flutter:
+  uses-material-design: true
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/logo1.jpg"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFF8F6"
