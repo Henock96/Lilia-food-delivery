@@ -14,6 +14,19 @@ rootProject.layout.buildDirectory.value(newBuildDir)
 subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
+
+    // Fix sentry_flutter 8.14.2 qui déclare Kotlin language version 1.6
+    // (refusée par le compilateur Kotlin récent). Force 1.8 minimum.
+    if (project.name == "sentry_flutter") {
+        plugins.withId("org.jetbrains.kotlin.android") {
+            tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+                compilerOptions {
+                    languageVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_1_8)
+                    apiVersion.set(org.jetbrains.kotlin.gradle.dsl.KotlinVersion.KOTLIN_1_8)
+                }
+            }
+        }
+    }
 }
 subprojects {
     project.evaluationDependsOn(":app")

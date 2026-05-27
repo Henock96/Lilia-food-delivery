@@ -2,7 +2,7 @@ name: lilia_food_delivery
 description: "Application livreur Lilia Food — Brazzaville, Congo."
 publish_to: 'none'
 
-version: 1.0.1+1
+version: 1.0.2+2
 
 environment:
   sdk: ^3.11.5
@@ -51,6 +51,7 @@ dependencies:
   intl: ^0.20.2
   url_launcher: ^6.3.1
   flutter_launcher_icons: ^0.14.4
+  sentry_flutter: ^8.14.2
 
 dev_dependencies:
   flutter_test:
