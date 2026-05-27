@@ -84,7 +84,7 @@ class TrackingSocketService {
       'orderId': orderId,
       'lat': lat,
       'lng': lng,
-      if (accuracy != null) 'accuracy': accuracy,
+      'accuracy': ?accuracy,
     });
     return true;
   }
