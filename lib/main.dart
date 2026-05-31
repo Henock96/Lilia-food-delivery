@@ -3,7 +3,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'features/deliveries/application/connectivity_watcher.dart';
 import 'features/deliveries/application/tracking_resume_service.dart';
 import 'routing/app_router.dart';
 import 'services/notification_service.dart';
@@ -28,6 +30,7 @@ void main() async {
     },
     appRunner: () async {
       await Firebase.initializeApp();
+      await initializeDateFormatting('fr_FR', null);
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
       runApp(const ProviderScope(child: LiliaDeliveryApp()));
     },
@@ -60,10 +63,12 @@ class _LiliaDeliveryAppState extends ConsumerState<LiliaDeliveryApp> {
         );
         ref.read(deliveryNotificationServiceProvider).init();
         ref.read(trackingResumeServiceProvider).start();
+        ref.read(connectivityWatcherProvider).start();
       } else {
         Sentry.configureScope((scope) => scope.setUser(null));
         ref.read(deliveryNotificationServiceProvider).removeToken();
         ref.read(trackingResumeServiceProvider).stop();
+        ref.read(connectivityWatcherProvider).stop();
       }
     });
   }

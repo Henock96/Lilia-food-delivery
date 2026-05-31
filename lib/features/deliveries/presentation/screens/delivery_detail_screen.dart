@@ -12,6 +12,11 @@ import '../../../../utilities/app_theme.dart';
 import '../../application/deliveries_controller.dart';
 import '../../application/location_service.dart';
 
+String _formatHourMinus1h(DateTime scheduledFor) {
+  final t = scheduledFor.subtract(const Duration(hours: 1)).toLocal();
+  return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+}
+
 class DeliveryDetailScreen extends ConsumerWidget {
   final String deliveryId;
   const DeliveryDetailScreen({super.key, required this.deliveryId});
@@ -49,6 +54,42 @@ class _DeliveryDetailBody extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Preorder banner
+          if (order != null && order.isPreorder && order.scheduledFor != null) ...[
+            Container(
+              width: double.infinity,
+              color: Colors.orange.shade50,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.schedule, color: Colors.deepOrange, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Pré-commande pour ${order.scheduledForFormatted}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.deepOrange,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          'Ne pas récupérer avant ${_formatHourMinus1h(order.scheduledFor!)}',
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.deepOrange),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
           // Status badge
           _StatusBanner(status: delivery.status),
           const SizedBox(height: 16),
@@ -62,7 +103,7 @@ class _DeliveryDetailBody extends ConsumerWidget {
           // Restaurant info
           if (restaurant != null) ...[
             _InfoCard(
-              title: 'Restaurant',
+              title: 'Récupérer ${restaurant.vendorType.pickupLocationLabel}',
               icon: Icons.restaurant,
               children: [
                 _InfoRow(label: 'Nom', value: restaurant.nom),
@@ -88,9 +129,41 @@ class _DeliveryDetailBody extends ConsumerWidget {
               icon: Icons.shopping_bag_outlined,
               children: order.items
                   .map(
-                    (item) => _InfoRow(
-                      label: item.productNom,
-                      value: '×${item.quantity}',
+                    (item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Flexible(child: Text(item.productNom,
+                                    style: const TextStyle(fontSize: 13))),
+                                if (item.madeToOrder)
+                                  Container(
+                                    margin: const EdgeInsets.only(left: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade200,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'Sur commande',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.black54),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            '×${item.quantity}',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
                     ),
                   )
                   .toList(),
@@ -121,16 +194,28 @@ class _DeliveryDetailBody extends ConsumerWidget {
 
           // Actions
           if (delivery.status == DeliveryStatus.assigner) ...[
-            ElevatedButton.icon(
-              onPressed: () async {
-                await ref
-                    .read(deliveryDetailControllerProvider(deliveryId).notifier)
-                    .acceptDelivery();
-                ref.invalidate(deliveryDetailControllerProvider(deliveryId));
-                if (context.mounted) context.pop();
-              },
-              icon: const Icon(Icons.check),
-              label: const Text('Accepter la mission'),
+            Tooltip(
+              message: (order != null && order.isReadyToPickup)
+                  ? ''
+                  : 'Trop tôt — pré-commande pour ${order?.scheduledForFormatted}',
+              child: ElevatedButton.icon(
+                onPressed: (order == null || order.isReadyToPickup)
+                    ? () async {
+                        await ref
+                            .read(
+                              deliveryDetailControllerProvider(deliveryId)
+                                  .notifier,
+                            )
+                            .acceptDelivery();
+                        ref.invalidate(
+                          deliveryDetailControllerProvider(deliveryId),
+                        );
+                        if (context.mounted) context.pop();
+                      }
+                    : null,
+                icon: const Icon(Icons.check),
+                label: const Text('Accepter la mission'),
+              ),
             ),
           ],
           if (delivery.status == DeliveryStatus.en_transit) ...[

@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../models/delivery.dart';
 import '../data/delivery_repository.dart';
+import 'connectivity_watcher.dart';
 import 'location_service.dart';
 
 part 'tracking_resume_service.g.dart';
@@ -22,10 +23,11 @@ part 'tracking_resume_service.g.dart';
 class TrackingResumeService with WidgetsBindingObserver {
   final DeliveryRepository _repo;
   final LocationService _location;
+  final Ref _ref;
 
   bool _checking = false;
 
-  TrackingResumeService(this._repo, this._location);
+  TrackingResumeService(this._repo, this._location, this._ref);
 
   void start() {
     WidgetsBinding.instance.addObserver(this);
@@ -47,6 +49,15 @@ class TrackingResumeService with WidgetsBindingObserver {
   Future<void> _checkAndResume() async {
     if (_checking || _location.isTracking) return;
     _checking = true;
+
+    // Ceinture + bretelles : flush la queue offline au cas où le
+    // ConnectivityWatcher aurait raté une transition réseau pendant
+    // que l'app était en pause.
+    try {
+      await _ref.read(connectivityWatcherProvider).flushQueue();
+    } catch (e) {
+      debugPrint('⚠️ Resume flush failed: $e');
+    }
 
     try {
       final missions = await _repo.getMyMissions();
@@ -76,6 +87,7 @@ TrackingResumeService trackingResumeService(Ref ref) {
   final service = TrackingResumeService(
     ref.watch(deliveryRepositoryProvider),
     ref.watch(locationServiceProvider),
+    ref,
   );
   ref.onDispose(service.stop);
   return service;

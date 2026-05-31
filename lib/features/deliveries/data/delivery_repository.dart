@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../constants/app_constants.dart';
@@ -172,6 +173,27 @@ class DeliveryRepository {
       }),
     );
     if (!_isSuccess(response)) throw Exception(_extractError(response.body));
+  }
+
+  /// Envoie un batch de positions GPS accumulées offline.
+  /// Backend : POST /tracking/position/batch — body `{ positions: [...] }`.
+  /// Retourne true si succès (2xx), false sinon (la queue n'est pas vidée).
+  Future<bool> sendPositionsBatch(List<Map<String, dynamic>> positions) async {
+    if (positions.isEmpty) return true;
+    try {
+      final headers = await _headers();
+      final response = await _client
+          .post(
+            Uri.parse('${AppConstants.baseUrl}/tracking/position/batch'),
+            headers: headers,
+            body: jsonEncode({'positions': positions}),
+          )
+          .timeout(const Duration(seconds: 30));
+      return _isSuccess(response);
+    } catch (e) {
+      debugPrint('⚠️ sendPositionsBatch failed: $e');
+      return false;
+    }
   }
 
   /// GET /users/me — profil du livreur connecté
