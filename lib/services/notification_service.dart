@@ -161,11 +161,40 @@ class DeliveryNotificationService {
     }
   }
 
+  String _buildNotifTitle(RemoteMessage message) {
+    final data = message.data;
+    final fallbackTitle = message.notification?.title ?? 'Nouvelle mission';
+
+    final isPreorder = data['isPreorder'] == 'true';
+    final scheduledForStr = data['scheduledFor'] as String? ?? '';
+    final scheduledFor = DateTime.tryParse(scheduledForStr);
+
+    if (isPreorder && scheduledFor != null) {
+      return '📅 Pré-commande à récupérer le ${_formatDateFr(scheduledFor)}';
+    }
+    return fallbackTitle;
+  }
+
+  String _formatDateFr(DateTime utc) {
+    final local = utc.toLocal();
+    const days = [
+      'Dimanche', 'Lundi', 'Mardi', 'Mercredi',
+      'Jeudi', 'Vendredi', 'Samedi',
+    ];
+    const months = [
+      'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+      'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+    ];
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    return '${days[local.weekday % 7]} ${local.day} ${months[local.month - 1]} à $hh:$mm';
+  }
+
   void _showLocal(RemoteMessage msg) {
     _local.show(
       id: msg.notification.hashCode,
-      title: msg.notification!.title,
-      body: msg.notification!.body,
+      title: _buildNotifTitle(msg),
+      body: msg.notification?.body,
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
           'high_importance_channel',

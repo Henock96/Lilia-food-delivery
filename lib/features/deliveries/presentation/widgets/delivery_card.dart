@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../models/delivery.dart';
+import '../../../../models/vendor_type.dart';
 import '../../../../utilities/app_theme.dart';
 
 class DeliveryCard extends StatelessWidget {
@@ -26,7 +27,9 @@ class DeliveryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final order = delivery.order;
     final restaurant = order?.restaurant;
-    return Card(
+    return Stack(
+      children: [
+      Card(
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
@@ -61,6 +64,28 @@ class DeliveryCard extends StatelessWidget {
                             fontSize: 15,
                           ),
                         ),
+                        if (restaurant != null &&
+                            restaurant.vendorType != VendorType.RESTAURANT) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Text(
+                                restaurant.vendorType.emoji,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                restaurant.vendorType.label,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         if (restaurant?.adresse != null)
                           Text(
                             restaurant!.adresse!,
@@ -115,6 +140,23 @@ class DeliveryCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (order.isPreorder && order.scheduledForFormatted != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.event, size: 14, color: Colors.deepOrange),
+                      const SizedBox(width: 4),
+                      Text(
+                        order.scheduledForFormatted!,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.deepOrange,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 6),
                 Row(
                   children: [
@@ -160,6 +202,36 @@ class DeliveryCard extends StatelessWidget {
           ),
         ),
       ),
-    );
+      ), // Card
+      if (order != null && order.isPreorder)
+        Positioned(
+          top: 8,
+          right: 8,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade100,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.orange.shade400),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.schedule, size: 12, color: Colors.deepOrange),
+                SizedBox(width: 4),
+                Text(
+                  'Pré-commande',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.deepOrange,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ], // Stack children
+    ); // Stack
   }
 }
