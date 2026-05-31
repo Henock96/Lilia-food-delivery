@@ -55,4 +55,4 @@ final class TrackingResumeServiceProvider
 }
 
 String _$trackingResumeServiceHash() =>
-    r'3a100ccb39be2f9f44a8fc498ff3839d01f917d4';
+    r'79489489e8214a918668157d286f7659eb4f7188';

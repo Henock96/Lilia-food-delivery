@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../data/delivery_repository.dart';
+import 'position_queue_service.dart';
 import 'tracking_socket_service.dart';
 
 part 'location_service.g.dart';
@@ -19,6 +20,7 @@ part 'location_service.g.dart';
 class LocationService {
   final DeliveryRepository _repo;
   final TrackingSocketService _ws;
+  final Ref _ref;
 
   Timer? _timer;
   String? _activeDeliveryId;
@@ -29,7 +31,7 @@ class LocationService {
   static const _wsInterval = Duration(seconds: 5);   // push WebSocket
   static const _httpEveryNTicks = 3;                  // 1 HTTP toutes les 3 ticks (= 15s)
 
-  LocationService(this._repo, this._ws);
+  LocationService(this._repo, this._ws, this._ref);
 
   Future<bool> requestPermission() async {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -106,7 +108,15 @@ class LocationService {
           position.accuracy,
         );
       } catch (e) {
-        debugPrint('[LocationService] HTTP fallback failed : $e');
+        debugPrint('⚠️ HTTP PATCH location failed, queueing: $e');
+        final queue = await _ref.read(positionQueueServiceProvider.future);
+        await queue.enqueue(QueuedPosition(
+          deliveryId: deliveryId,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          accuracy: position.accuracy,
+          recordedAt: DateTime.now().toUtc(),
+        ));
       }
     }
   }
@@ -120,4 +130,5 @@ class LocationService {
 LocationService locationService(Ref ref) => LocationService(
   ref.watch(deliveryRepositoryProvider),
   ref.watch(trackingSocketServiceProvider),
+  ref,
 );
