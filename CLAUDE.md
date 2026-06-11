@@ -2,6 +2,13 @@
 
 App mobile Flutter pour les **livreurs** de la plateforme Lilia Food (Brazzaville, Congo). Rôle Firebase `LIVREUR`.
 
+Lilia Food est une **marketplace locale multi-vendeurs** (restaurants, cuisines
+maison, boulangeries, pâtisseries, boissons). Côté livreur l'impact est léger :
+le point de retrait peut être n'importe quel type de vendeur. `lib/models/vendor_type.dart`
+(enum `VendorType`) sert à afficher le bon label/emoji du vendeur sur la mission
+(`delivery_card.dart`, `delivery_detail_screen.dart`) ; `order.dart` porte le
+`vendorType` du point de retrait.
+
 **Backend URL** : `https://lilia-backend.onrender.com`
 **Org** : `com.dreesis`
 
