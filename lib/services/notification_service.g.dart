@@ -56,4 +56,4 @@ final class DeliveryNotificationServiceProvider
 }
 
 String _$deliveryNotificationServiceHash() =>
-    r'76a3d47fee5b4b93924ff4cec01a41dfdc14a731';
+    r'b133b369b3da96a386eca6852d3974d8618de844';

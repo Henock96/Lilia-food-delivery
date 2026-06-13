@@ -1,51 +1,22 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../../../constants/app_constants.dart';
+import '../../../core/network/api_client.dart';
 import '../../../models/delivery.dart';
 import '../../../models/app_user.dart';
-import '../../auth/data/auth_repository.dart';
 
 part 'delivery_repository.g.dart';
 
 class DeliveryRepository {
-  final AuthRepository _auth;
-  final http.Client _client;
+  final ApiClient _api;
 
-  DeliveryRepository(this._auth, this._client);
+  DeliveryRepository(this._api);
 
-  Future<Map<String, String>> _headers() async {
-    final token = await _auth.getIdToken();
-    if (token == null) {
-      throw Exception('Session expirée. Veuillez vous reconnecter.');
-    }
-    return {
-      'Authorization': 'Bearer $token',
-      'Content-Type': 'application/json',
-    };
-  }
-
-  String _extractError(String body) {
-    try {
-      final json = jsonDecode(body);
-      if (json['message'] is String) return json['message'] as String;
-      if (json['message'] is List) return (json['message'] as List).join(', ');
-    } catch (_) {}
-    return 'Une erreur est survenue';
-  }
-
-  bool _isSuccess(http.Response response) =>
-      response.statusCode >= 200 && response.statusCode < 300;
-
-  Map<String, dynamic> _decodeObject(String body) {
-    final decoded = jsonDecode(body);
+  Map<String, dynamic> _asObject(dynamic decoded) {
     if (decoded is Map<String, dynamic>) return decoded;
     throw const FormatException('Réponse API invalide');
   }
 
-  List<dynamic> _decodeList(String body) {
-    final decoded = jsonDecode(body);
+  List<dynamic> _asList(dynamic decoded) {
     if (decoded is List<dynamic>) return decoded;
     if (decoded is Map<String, dynamic> && decoded['data'] is List<dynamic>) {
       return decoded['data'] as List<dynamic>;
@@ -53,16 +24,16 @@ class DeliveryRepository {
     throw const FormatException('Liste API invalide');
   }
 
-  Delivery _decodeDelivery(String body) {
-    final json = _decodeObject(body);
+  Delivery _toDelivery(dynamic decoded) {
+    final json = _asObject(decoded);
     final payload = json['data'] is Map<String, dynamic>
         ? json['data'] as Map<String, dynamic>
         : json;
     return Delivery.fromJson(payload);
   }
 
-  AppUser _decodeUser(String body) {
-    final json = _decodeObject(body);
+  AppUser _toUser(dynamic decoded) {
+    final json = _asObject(decoded);
     final payload = json['user'] is Map<String, dynamic>
         ? json['user'] as Map<String, dynamic>
         : json['data'] is Map<String, dynamic>
@@ -73,86 +44,50 @@ class DeliveryRepository {
 
   /// GET /deliveries/mine — livraisons assignées au livreur connecté
   Future<List<Delivery>> getMyDeliveries({DeliveryStatus? status}) async {
-    final headers = await _headers();
-    final uri = Uri.parse('${AppConstants.baseUrl}/deliveries/mine').replace(
-      queryParameters: status != null ? {'status': status.toApiString()} : null,
+    final res = await _api.getJson(
+      '/deliveries/mine',
+      query: status != null ? {'status': status.toApiString()} : null,
     );
-
-    final response = await _client.get(uri, headers: headers);
-    if (_isSuccess(response)) {
-      final data = _decodeList(response.body);
-      return data
-          .map((e) => Delivery.fromJson(e as Map<String, dynamic>))
-          .toList();
-    }
-    throw Exception(_extractError(response.body));
+    return _asList(res.data)
+        .map((e) => Delivery.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   /// GET /deliveries/my-missions — missions actives (ASSIGNER + EN_TRANSIT)
   Future<List<Delivery>> getMyMissions() async {
-    final headers = await _headers();
-    final response = await _client.get(
-      Uri.parse('${AppConstants.baseUrl}/deliveries/my-missions'),
-      headers: headers,
-    );
-    if (_isSuccess(response)) {
-      final data = _decodeList(response.body);
-      return data
-          .map((e) => Delivery.fromJson(e as Map<String, dynamic>))
-          .toList();
-    }
-    throw Exception(_extractError(response.body));
+    final res = await _api.getJson('/deliveries/my-missions');
+    return _asList(res.data)
+        .map((e) => Delivery.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   /// GET /deliveries/:id
   Future<Delivery> getDelivery(String id) async {
-    final headers = await _headers();
-    final response = await _client.get(
-      Uri.parse('${AppConstants.baseUrl}/deliveries/$id'),
-      headers: headers,
-    );
-    if (_isSuccess(response)) {
-      return _decodeDelivery(response.body);
-    }
-    throw Exception(_extractError(response.body));
+    final res = await _api.getJson('/deliveries/$id');
+    return _toDelivery(res.data);
   }
 
   /// PATCH /deliveries/:id/accept — accepter la livraison (ASSIGNER → EN_TRANSIT)
   Future<Delivery> acceptDelivery(String id) async {
-    final headers = await _headers();
-    final response = await _client.patch(
-      Uri.parse('${AppConstants.baseUrl}/deliveries/$id/accept'),
-      headers: headers,
-    );
-    if (_isSuccess(response)) {
-      return _decodeDelivery(response.body);
-    }
-    throw Exception(_extractError(response.body));
+    final res = await _api.patchJson('/deliveries/$id/accept');
+    return _toDelivery(res.data);
   }
 
   /// PATCH /deliveries/:id/status — mettre à jour le statut (ex: LIVRER ou ECHEC)
   Future<Delivery> updateStatus(String id, DeliveryStatus status) async {
-    final headers = await _headers();
-    final response = await _client.patch(
-      Uri.parse('${AppConstants.baseUrl}/deliveries/$id/status'),
-      headers: headers,
-      body: jsonEncode({'status': status.toApiString()}),
+    final res = await _api.patchJson(
+      '/deliveries/$id/status',
+      body: {'status': status.toApiString()},
     );
-    if (_isSuccess(response)) {
-      return _decodeDelivery(response.body);
-    }
-    throw Exception(_extractError(response.body));
+    return _toDelivery(res.data);
   }
 
   /// PATCH /deliveries/driver-status — changer le statut du livreur
   Future<void> setDriverStatus(DriverStatus status) async {
-    final headers = await _headers();
-    final response = await _client.patch(
-      Uri.parse('${AppConstants.baseUrl}/deliveries/driver-status'),
-      headers: headers,
-      body: jsonEncode({'status': status.toApiString()}),
+    await _api.patchJson(
+      '/deliveries/driver-status',
+      body: {'status': status.toApiString()},
     );
-    if (!_isSuccess(response)) throw Exception(_extractError(response.body));
   }
 
   /// PATCH /deliveries/:id/location — envoyer la position GPS
@@ -162,34 +97,27 @@ class DeliveryRepository {
     double longitude,
     double accuracy,
   ) async {
-    final headers = await _headers();
-    final response = await _client.patch(
-      Uri.parse('${AppConstants.baseUrl}/deliveries/$deliveryId/location'),
-      headers: headers,
-      body: jsonEncode({
+    await _api.patchJson(
+      '/deliveries/$deliveryId/location',
+      body: {
         'latitude': latitude,
         'longitude': longitude,
         'accuracy': accuracy,
-      }),
+      },
     );
-    if (!_isSuccess(response)) throw Exception(_extractError(response.body));
   }
 
   /// Envoie un batch de positions GPS accumulées offline.
   /// Backend : POST /tracking/position/batch — body `{ positions: [...] }`.
-  /// Retourne true si succès (2xx), false sinon (la queue n'est pas vidée).
+  /// Retourne true si succès, false sinon (la queue n'est pas vidée).
   Future<bool> sendPositionsBatch(List<Map<String, dynamic>> positions) async {
     if (positions.isEmpty) return true;
     try {
-      final headers = await _headers();
-      final response = await _client
-          .post(
-            Uri.parse('${AppConstants.baseUrl}/tracking/position/batch'),
-            headers: headers,
-            body: jsonEncode({'positions': positions}),
-          )
-          .timeout(const Duration(seconds: 30));
-      return _isSuccess(response);
+      await _api.postJson(
+        '/tracking/position/batch',
+        body: {'positions': positions},
+      );
+      return true;
     } catch (e) {
       debugPrint('⚠️ sendPositionsBatch failed: $e');
       return false;
@@ -198,23 +126,11 @@ class DeliveryRepository {
 
   /// GET /users/me — profil du livreur connecté
   Future<AppUser> getMe() async {
-    final headers = await _headers();
-    final response = await _client.get(
-      Uri.parse('${AppConstants.baseUrl}/users/me'),
-      headers: headers,
-    );
-    if (_isSuccess(response)) {
-      return _decodeUser(response.body);
-    }
-    throw Exception(_extractError(response.body));
+    final res = await _api.getJson('/users/me');
+    return _toUser(res.data);
   }
 }
 
 @Riverpod(keepAlive: true)
-http.Client httpClient(Ref ref) => http.Client();
-
-@Riverpod(keepAlive: true)
-DeliveryRepository deliveryRepository(Ref ref) => DeliveryRepository(
-  ref.watch(authRepositoryProvider),
-  ref.watch(httpClientProvider),
-);
+DeliveryRepository deliveryRepository(Ref ref) =>
+    DeliveryRepository(ref.watch(apiClientProvider));

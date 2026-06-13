@@ -30,7 +30,6 @@ dependencies:
   go_router: ^17.2.3
 
   # HTTP
-  http: ^1.6.0
   dio: ^5.7.0
 
   # Local storage

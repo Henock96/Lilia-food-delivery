@@ -5,11 +5,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:http/http.dart' as http;
+import '../core/network/api_client.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../constants/app_constants.dart';
-import '../features/auth/data/auth_repository.dart';
 import '../features/deliveries/application/deliveries_controller.dart';
 
 part 'notification_service.g.dart';
@@ -48,7 +46,7 @@ class DeliveryNotificationService {
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _local =
       FlutterLocalNotificationsPlugin();
-  final AuthRepository _authRepo;
+  final ApiClient _api;
   final Ref _ref;
 
   StreamSubscription<RemoteMessage>? _foregroundSub;
@@ -59,7 +57,7 @@ class DeliveryNotificationService {
 
   String? fcmToken;
 
-  DeliveryNotificationService(this._authRepo, this._ref);
+  DeliveryNotificationService(this._api, this._ref);
 
   Future<void> init() async {
     if (_disposed || _initialized) return;
@@ -109,7 +107,9 @@ class DeliveryNotificationService {
         if (r.payload != null) {
           try {
             _handleData(jsonDecode(r.payload!));
-          } catch (_) {}
+          } catch (_) {
+            // Payload non-JSON : on ignore (notif sans données exploitables).
+          }
         }
       },
     );
@@ -220,22 +220,11 @@ class DeliveryNotificationService {
     if (fcmToken == null) return;
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        final idToken = await _authRepo.getIdToken();
-        if (idToken == null) return;
-        final response = await http
-            .post(
-              Uri.parse('${AppConstants.baseUrl}/notifications/register-token'),
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer $idToken',
-              },
-              body: jsonEncode({'token': fcmToken}),
-            )
-            .timeout(const Duration(seconds: 35));
-        if (response.statusCode == 200 || response.statusCode == 201) return;
-        debugPrint(
-          'FCM register failed (attempt $attempt/$maxRetries): ${response.statusCode}',
+        await _api.postJson(
+          '/notifications/register-token',
+          body: {'token': fcmToken},
         );
+        return;
       } catch (e) {
         debugPrint(
           'Erreur enregistrement FCM token (attempt $attempt/$maxRetries): $e',
@@ -249,20 +238,14 @@ class DeliveryNotificationService {
   Future<void> removeToken() async {
     if (fcmToken == null) return;
     try {
-      final idToken = await _authRepo.getIdToken();
-      if (idToken == null) return;
-      await http
-          .delete(
-            Uri.parse('${AppConstants.baseUrl}/notifications/token'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $idToken',
-            },
-            body: jsonEncode({'token': fcmToken}),
-          )
-          .timeout(const Duration(seconds: 15));
+      await _api.deleteJson(
+        '/notifications/token',
+        body: {'token': fcmToken},
+      );
       fcmToken = null;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Erreur suppression FCM token: $e');
+    }
   }
 
   void dispose() {
@@ -277,7 +260,7 @@ class DeliveryNotificationService {
 @Riverpod(keepAlive: true)
 DeliveryNotificationService deliveryNotificationService(Ref ref) {
   final svc = DeliveryNotificationService(
-    ref.watch(authRepositoryProvider),
+    ref.watch(apiClientProvider),
     ref,
   );
   ref.onDispose(svc.dispose);

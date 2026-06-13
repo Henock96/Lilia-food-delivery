@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../common_widgets/app_cached_image.dart';
 import '../../../../models/app_user.dart';
 import '../../../../utilities/app_theme.dart';
 import '../../../auth/application/auth_controller.dart';
@@ -38,23 +39,18 @@ class _ProfileBody extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // Avatar
-          CircleAvatar(
+          // Avatar (image réseau cachée — LIL-37)
+          AppCachedAvatar(
+            imageUrl: user.imageUrl,
             radius: 48,
-            backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-            backgroundImage: user.imageUrl != null
-                ? NetworkImage(user.imageUrl!)
-                : null,
-            child: user.imageUrl == null
-                ? Text(
-                    user.nom.isNotEmpty ? user.nom[0].toUpperCase() : 'L',
-                    style: const TextStyle(
-                      fontSize: 36,
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  )
-                : null,
+            fallback: Text(
+              user.nom.isNotEmpty ? user.nom[0].toUpperCase() : 'L',
+              style: const TextStyle(
+                fontSize: 36,
+                color: AppColors.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           Text(
