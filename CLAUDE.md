@@ -302,6 +302,30 @@ url_launcher: ^6.3.1
 3. ✅ **`LocationService.startTracking({deliveryId, orderId})`** : signature mise à jour pour passer l'orderId au WS event
 4. ✅ **Backend bug coordonné corrigé** : `DeliveriesService.updateStatus(LIVRER)` émet maintenant `order.status.updated` → FCM client + broadcast WS + loyalty points crédités
 
+## Remédiation audit (août 2026 — `AUDIT_2026-08-01.md`)
+
+1. ✅ **Keystore retiré du dépôt** (C-1) — `upload-keystore.jks` sorti de l'index
+   (`git rm --cached`, fichier local préservé). `.gitignore` durci : `*.jks`,
+   `*.keystore`, `/android/key.properties`, `/android/local.properties`,
+   `/android/build/`, `/android/app/build/`.
+   ⚠️ Il reste dans l'historique git → rotation du keystore + purge historique +
+   Play App Signing à décider.
+2. ✅ **Pattern `MapsKeys.xcconfig`** — celui de cette app a servi de modèle pour
+   sortir la clé Google Maps du code de `lilia-app` (template committé +
+   `MapsKeys.local.xcconfig` gitignoré + `#include?`).
+3. ✅ **Dépendances alignées** sur les 3 apps Flutter (`firebase_core ^4.10.0`,
+   `firebase_auth ^6.5.2`, `flutter_riverpod ^3.3.2`, `riverpod_annotation
+   ^4.0.3`, `go_router ^17.3.0`, `dio ^5.9.2`), `build_runner` régénéré.
+4. ✅ **Côté backend** (impacte cette app) : le WebSocket `/tracking` revalide
+   `exp` du token **et** `statusUser` à chaque message, et valide le payload
+   `driver:position` via un DTO class-validator. Un token expiré en cours de
+   mission fait maintenant échouer l'émission → la reconnexion Socket.io doit
+   repartir sur un token frais.
+
+Résultat : `flutter analyze` **0 erreur / 0 warning**, tests **21/21**.
+
+---
+
 ## À compléter
 
 - [ ] Firebase config : `google-services.json` (Android) + `GoogleService-Info.plist` (iOS) — même projet que `lilia-app`

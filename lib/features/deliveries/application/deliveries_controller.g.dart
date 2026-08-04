@@ -45,7 +45,7 @@ abstract class _$MissionsController extends $AsyncNotifier<List<Delivery>> {
   FutureOr<List<Delivery>> build();
   @$mustCallSuper
   @override
-  void runBuild() {
+  WhenComplete runBuild() {
     final ref = this.ref as $Ref<AsyncValue<List<Delivery>>, List<Delivery>>;
     final element =
         ref.element
@@ -55,7 +55,7 @@ abstract class _$MissionsController extends $AsyncNotifier<List<Delivery>> {
               Object?,
               Object?
             >;
-    element.handleCreate(ref, build);
+    return element.handleCreate(ref, build);
   }
 }
 
@@ -99,7 +99,7 @@ abstract class _$DeliveriesHistoryController
   FutureOr<List<Delivery>> build();
   @$mustCallSuper
   @override
-  void runBuild() {
+  WhenComplete runBuild() {
     final ref = this.ref as $Ref<AsyncValue<List<Delivery>>, List<Delivery>>;
     final element =
         ref.element
@@ -109,7 +109,7 @@ abstract class _$DeliveriesHistoryController
               Object?,
               Object?
             >;
-    element.handleCreate(ref, build);
+    return element.handleCreate(ref, build);
   }
 }
 
@@ -200,7 +200,7 @@ abstract class _$DeliveryDetailController extends $AsyncNotifier<Delivery> {
   FutureOr<Delivery> build(String deliveryId);
   @$mustCallSuper
   @override
-  void runBuild() {
+  WhenComplete runBuild() {
     final ref = this.ref as $Ref<AsyncValue<Delivery>, Delivery>;
     final element =
         ref.element
@@ -210,6 +210,6 @@ abstract class _$DeliveryDetailController extends $AsyncNotifier<Delivery> {
               Object?,
               Object?
             >;
-    element.handleCreate(ref, () => build(_$args));
+    return element.handleCreate(ref, () => build(_$args));
   }
 }
