@@ -54,3 +54,6 @@ app.*.map.json
 # Artefacts de build Android (le /build/ ancré racine ne les couvre pas)
 /android/build/
 /android/app/build/
+
+# Clés APNs Apple (.p8) — un secret, jamais versionné
+*.p8
