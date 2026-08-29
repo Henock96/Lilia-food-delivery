@@ -55,6 +55,16 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- `remote-notification` autorise iOS à réveiller l'app pour exécuter
+	     `firebaseMessagingBackgroundHandler` sur les messages FCM reçus en
+	     arrière-plan. Sans lui, seuls les pushs affichés par le système
+	     arrivent et le handler Dart n'est jamais appelé.
+	     NB : le mode `location` (tracking GPS app fermée) reste à ajouter
+	     séparément — cf. la TODO « tracking arrière-plan complet ». -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

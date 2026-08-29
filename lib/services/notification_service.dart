@@ -9,89 +9,109 @@ import '../core/network/api_client.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../features/deliveries/application/deliveries_controller.dart';
+import '../routing/app_router.dart';
+import 'fcm_token_registrar.dart';
+import 'notification_router.dart';
 
 part 'notification_service.g.dart';
 
+/// ⚠️ Ne PAS y afficher de notification locale. Le backend envoie toujours un
+/// bloc `notification` (`notifications.service.ts`) et l'app déclare
+/// `default_notification_channel_id` dans son manifest : Android affiche donc
+/// déjà la notification tout seul quand l'app est en arrière-plan. Un `show()`
+/// ici en produisait une seconde, identique.
+///
+/// Ce handler tourne dans un isolate séparé : il n'a accès ni au ProviderScope
+/// ni au router. Le rafraîchissement des missions se fait au retour au premier
+/// plan (`onMessageOpenedApp` / `getInitialMessage`).
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-
-  if (message.notification != null) {
-    final plugin = FlutterLocalNotificationsPlugin();
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    await plugin.initialize(
-      settings: const InitializationSettings(android: android),
-    );
-
-    await plugin.show(
-      id: message.notification.hashCode,
-      title: message.notification!.title,
-      body: message.notification!.body,
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'high_importance_channel',
-          'Notifications Commandes',
-          channelDescription: 'Notifications pour les nouvelles missions.',
-          importance: Importance.max,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-      ),
-      payload: jsonEncode(message.data),
-    );
-  }
+  debugPrint('Message FCM reçu en arrière-plan: ${message.data}');
 }
 
 class DeliveryNotificationService {
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _local =
       FlutterLocalNotificationsPlugin();
-  final ApiClient _api;
+  final FcmTokenRegistrar _registrar;
   final Ref _ref;
+  static const NotificationRouter _router = NotificationRouter();
 
   StreamSubscription<RemoteMessage>? _foregroundSub;
   StreamSubscription<RemoteMessage>? _openedSub;
   StreamSubscription<String>? _tokenRefreshSub;
-  bool _initialized = false;
   bool _disposed = false;
 
-  String? fcmToken;
+  /// Token FCM effectivement enregistré côté serveur (`null` hors session).
+  String? get fcmToken => _registrar.token;
 
-  DeliveryNotificationService(this._api, this._ref);
+  DeliveryNotificationService(this._registrar, this._ref);
 
   Future<void> init() async {
-    if (_disposed || _initialized) return;
-    _initialized = true;
+    // La garde de session vit dans le registrar : `removeToken()` la réarme,
+    // pour qu'une reconnexion sans redémarrage de l'app réenregistre bien un
+    // token.
+    if (_disposed || !_registrar.beginSession()) return;
     try {
       await _initLocalNotifications();
       await _requestPermission();
       _setupHandlers();
 
-      try {
-        fcmToken = await _fcm.getToken();
-      } on FirebaseException catch (e) {
-        if (e.code == 'apns-token-not-set') {
-          debugPrint('APNS non disponible (simulateur), FCM skippé');
-          return;
-        }
-        rethrow;
-      }
-
-      if (fcmToken != null) await _registerToken();
+      final token = await _fetchFcmToken();
+      if (token != null) await _registrar.register(token);
 
       await _tokenRefreshSub?.cancel();
       _tokenRefreshSub = _fcm.onTokenRefresh.listen((newToken) {
         if (_disposed) return;
-        fcmToken = newToken;
-        _registerToken();
+        _registrar.register(newToken);
       });
 
       final initial = await _fcm.getInitialMessage();
-      if (initial != null) _handleData(initial.data);
+      // L'app a été lancée en tapant la notification : la navigation est bien
+      // voulue par le livreur.
+      if (initial != null) {
+        _handleData(initial.data, NotificationTrigger.tap);
+      }
     } catch (e) {
-      _initialized = false;
+      // Referme la session pour qu'un init ultérieur puisse retenter.
+      await _registrar.remove();
       debugPrint('NotificationService init error: $e');
     }
+  }
+
+  /// Récupère le token FCM en attendant d'abord le token APNS sur iOS.
+  ///
+  /// L'enregistrement APNS est **asynchrone** : au premier lancement, il n'est
+  /// pas encore terminé quand `init()` s'exécute. Appeler `getToken()` tout de
+  /// suite lève `apns-token-not-set`, et l'ancienne version abandonnait
+  /// définitivement — le livreur restait sans token FCM pour toute la session,
+  /// donc sans aucune mission poussée.
+  ///
+  /// Renvoie `null` quand APNS est réellement indisponible (simulateur iOS).
+  Future<String?> _fetchFcmToken({
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    var attempt = 0;
+
+    while (DateTime.now().isBefore(deadline)) {
+      attempt++;
+      try {
+        return await _fcm.getToken();
+      } on FirebaseException catch (e) {
+        if (e.code != 'apns-token-not-set') rethrow;
+        // APNS pas encore prêt : on retente jusqu'à l'échéance.
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+    }
+
+    debugPrint(
+      '⚠️ Token APNS indisponible après $attempt tentatives '
+      '(${timeout.inSeconds}s). Simulateur iOS, ou entitlement '
+      '`aps-environment` absent de la config de build. Aucun push ne sera reçu.',
+    );
+    return null;
   }
 
   Future<void> _initLocalNotifications() async {
@@ -106,7 +126,10 @@ class DeliveryNotificationService {
       onDidReceiveNotificationResponse: (r) {
         if (r.payload != null) {
           try {
-            _handleData(jsonDecode(r.payload!));
+            _handleData(
+              Map<String, dynamic>.from(jsonDecode(r.payload!) as Map),
+              NotificationTrigger.tap,
+            );
           } catch (_) {
             // Payload non-JSON : on ignore (notif sans données exploitables).
           }
@@ -143,21 +166,43 @@ class DeliveryNotificationService {
     _openedSub?.cancel();
 
     _foregroundSub = FirebaseMessaging.onMessage.listen((msg) {
-      _handleData(msg.data);
+      // Trigger foreground : on recharge les missions, mais on ne déplace pas
+      // le livreur — il est peut-être en pleine course.
+      _handleData(msg.data, NotificationTrigger.foreground);
       if (msg.notification != null) {
         _showLocal(msg);
       }
     });
 
     _openedSub = FirebaseMessaging.onMessageOpenedApp.listen((msg) {
-      _handleData(msg.data);
+      _handleData(msg.data, NotificationTrigger.tap);
     });
   }
 
-  void _handleData(Map<String, dynamic> data) {
-    // Nouvelle mission assignée → rafraîchir la liste
-    if (data['type'] == 'new_mission' || data.containsKey('deliveryId')) {
-      _ref.read(missionsControllerProvider.notifier).refresh();
+  /// Applique l'action décidée par [NotificationRouter] (couvert par
+  /// `test/services/notification_router_test.dart`).
+  void _handleData(Map<String, dynamic> data, NotificationTrigger trigger) {
+    if (_disposed) return;
+
+    final action = _router.resolve(data, trigger: trigger);
+    if (action == NotificationAction.none) return;
+
+    switch (action.refresh) {
+      case NotificationTarget.missions:
+        _ref.read(missionsControllerProvider.notifier).refresh();
+      case null:
+        break;
+    }
+
+    final route = action.route;
+    if (route == null) return;
+
+    // `push` empile par dessus l'écran courant : le livreur peut revenir à ce
+    // qu'il faisait.
+    try {
+      _ref.read(appRouterProvider).push(route);
+    } catch (e) {
+      debugPrint('Erreur navigation notification ($route): $e');
     }
   }
 
@@ -216,37 +261,9 @@ class DeliveryNotificationService {
     );
   }
 
-  Future<void> _registerToken({int maxRetries = 3}) async {
-    if (fcmToken == null) return;
-    for (int attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        await _api.postJson(
-          '/notifications/register-token',
-          body: {'token': fcmToken},
-        );
-        return;
-      } catch (e) {
-        debugPrint(
-          'Erreur enregistrement FCM token (attempt $attempt/$maxRetries): $e',
-        );
-        if (attempt == maxRetries) return;
-        await Future.delayed(Duration(seconds: attempt * 15));
-      }
-    }
-  }
-
-  Future<void> removeToken() async {
-    if (fcmToken == null) return;
-    try {
-      await _api.deleteJson(
-        '/notifications/token',
-        body: {'token': fcmToken},
-      );
-      fcmToken = null;
-    } catch (e) {
-      debugPrint('Erreur suppression FCM token: $e');
-    }
-  }
+  /// Purge le token côté serveur au logout et réarme la session, pour qu'une
+  /// reconnexion dans la même session d'app réenregistre bien un token.
+  Future<void> removeToken() => _registrar.remove();
 
   void dispose() {
     if (_disposed) return;
@@ -258,9 +275,13 @@ class DeliveryNotificationService {
 }
 
 @Riverpod(keepAlive: true)
+FcmTokenRegistrar fcmTokenRegistrar(Ref ref) =>
+    FcmTokenRegistrar(ref.watch(apiClientProvider));
+
+@Riverpod(keepAlive: true)
 DeliveryNotificationService deliveryNotificationService(Ref ref) {
   final svc = DeliveryNotificationService(
-    ref.watch(apiClientProvider),
+    ref.watch(fcmTokenRegistrarProvider),
     ref,
   );
   ref.onDispose(svc.dispose);

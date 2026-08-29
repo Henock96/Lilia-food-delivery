@@ -61,7 +61,11 @@ class TrackingResumeService with WidgetsBindingObserver {
 
     try {
       final missions = await _repo.getMyMissions();
-      final active = missions.where((m) => m.status == DeliveryStatus.en_transit).toList();
+      // `en_transit` uniquement, et pas `accepter` : tant que le livreur n'a
+      // pas le repas, sa position n'a pas à être diffusée au client.
+      final active = missions
+          .where((m) => m.status == DeliveryStatus.en_transit)
+          .toList();
       if (active.isEmpty) return;
 
       // Reprend le tracking sur la 1ère mission EN_TRANSIT

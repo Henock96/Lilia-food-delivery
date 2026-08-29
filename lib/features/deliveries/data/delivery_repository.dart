@@ -67,9 +67,22 @@ class DeliveryRepository {
     return _toDelivery(res.data);
   }
 
-  /// PATCH /deliveries/:id/accept — accepter la livraison (ASSIGNER → EN_TRANSIT)
+  /// PATCH /deliveries/:id/accept — accepter la mission (ASSIGNER → ACCEPTER).
+  ///
+  /// N'envoie AUCUNE notification au client : accepter, c'est s'engager à aller
+  /// chercher le repas, pas être en route vers lui.
   Future<Delivery> acceptDelivery(String id) async {
     final res = await _api.patchJson('/deliveries/$id/accept');
+    return _toDelivery(res.data);
+  }
+
+  /// PATCH /deliveries/:id/pickup — confirmer la récupération du repas
+  /// (ACCEPTER → EN_TRANSIT).
+  ///
+  /// C'est ce geste qui fait passer la commande EN_ROUTE côté backend et
+  /// déclenche le « votre commande est en route » chez le client.
+  Future<Delivery> confirmPickup(String id) async {
+    final res = await _api.patchJson('/deliveries/$id/pickup');
     return _toDelivery(res.data);
   }
 

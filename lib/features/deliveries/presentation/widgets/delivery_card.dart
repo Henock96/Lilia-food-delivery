@@ -17,6 +17,7 @@ class DeliveryCard extends StatelessWidget {
 
   Color _statusColor() => switch (delivery.status) {
     DeliveryStatus.assigner => AppColors.warning,
+    DeliveryStatus.accepter => AppColors.warning,
     DeliveryStatus.en_transit => AppColors.primary,
     DeliveryStatus.livrer => AppColors.success,
     DeliveryStatus.echec => AppColors.error,

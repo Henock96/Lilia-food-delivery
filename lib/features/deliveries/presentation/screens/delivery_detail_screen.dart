@@ -218,6 +218,56 @@ class _DeliveryDetailBody extends ConsumerWidget {
               ),
             ),
           ],
+          // Mission acceptée : le livreur va au restaurant. Tant qu'il n'a pas
+          // confirmé la récupération, la commande n'est PAS annoncée « en
+          // route » au client — c'est tout l'objet de cette étape.
+          if (delivery.status == DeliveryStatus.accepter) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.storefront, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Rendez-vous au restaurant pour récupérer la commande.',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                try {
+                  await ref
+                      .read(
+                        deliveryDetailControllerProvider(deliveryId).notifier,
+                      )
+                      .confirmPickup();
+                  ref.invalidate(deliveryDetailControllerProvider(deliveryId));
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Récupération impossible : $e'),
+                        backgroundColor: AppColors.error,
+                      ),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.shopping_bag),
+              label: const Text('J\'ai récupéré la commande'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.success,
+              ),
+            ),
+          ],
           if (delivery.status == DeliveryStatus.en_transit) ...[
             ElevatedButton.icon(
               onPressed: () async {
@@ -1019,6 +1069,7 @@ class _StatusBanner extends StatelessWidget {
 
   Color get _color => switch (status) {
     DeliveryStatus.assigner => AppColors.warning,
+    DeliveryStatus.accepter => AppColors.warning,
     DeliveryStatus.en_transit => AppColors.primary,
     DeliveryStatus.livrer => AppColors.success,
     DeliveryStatus.echec => AppColors.error,
