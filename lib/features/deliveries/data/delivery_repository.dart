@@ -76,6 +76,20 @@ class DeliveryRepository {
     return _toDelivery(res.data);
   }
 
+  /// PATCH /deliveries/:id/decline — refuser une mission non encore acceptée.
+  ///
+  /// La livraison redevient assignable et le vendeur est prévenu qu'il doit
+  /// désigner quelqu'un d'autre. Sans ce chemin, le seul moyen de ne pas faire
+  /// une course était de l'ignorer — le vendeur attendait alors dans le vide.
+  Future<void> declineDelivery(String id, {String? reason}) async {
+    await _api.patchJson(
+      '/deliveries/$id/decline',
+      body: {
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
+  }
+
   /// PATCH /deliveries/:id/pickup — confirmer la récupération du repas
   /// (ACCEPTER → EN_TRANSIT).
   ///

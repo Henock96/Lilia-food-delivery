@@ -5,6 +5,8 @@ import '../../../../models/app_user.dart';
 import '../../../../utilities/app_theme.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../application/profile_controller.dart';
+import '../../data/ratings_repository.dart';
+import 'my_ratings_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -61,6 +63,12 @@ class _ProfileBody extends ConsumerWidget {
           ),
           if (user.phone != null)
             Text(user.phone!, style: const TextStyle(color: AppColors.textMed)),
+          const SizedBox(height: 12),
+
+          // Note moyenne : le livreur est noté par les clients depuis le
+          // 29/08, mais il ne pouvait pas voir sa note — une notation que le
+          // noté ignore n'a aucun effet sur la qualité de service.
+          _RatingSummaryTile(delivererId: user.id),
           const SizedBox(height: 24),
 
           // Driver status toggle
@@ -215,4 +223,52 @@ class _InfoTile extends StatelessWidget {
       ],
     ),
   );
+}
+
+
+/// Note moyenne du livreur + accès à l'historique de ses avis.
+///
+/// Affiche « Pas encore noté » plutôt que 0 tant qu'aucun client n'a voté :
+/// un livreur qui débute n'est pas un livreur mal noté.
+class _RatingSummaryTile extends ConsumerWidget {
+  const _RatingSummaryTile({required this.delivererId});
+
+  final String delivererId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summaryAsync = ref.watch(myRatingSummaryProvider(delivererId));
+
+    return summaryAsync.maybeWhen(
+      // Une note indisponible ne doit pas trouer le profil.
+      orElse: () => const SizedBox.shrink(),
+      data: (summary) => Card(
+        child: ListTile(
+          leading: Icon(
+            Icons.star_rounded,
+            color: summary.hasRatings ? Colors.amber : AppColors.textLight,
+            size: 32,
+          ),
+          title: Text(
+            summary.hasRatings
+                ? '${summary.average!.toStringAsFixed(1)} / 5'
+                : 'Pas encore noté',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          subtitle: Text(
+            summary.hasRatings
+                ? '${summary.total} avis client${summary.total > 1 ? 's' : ''}'
+                : 'Vos notes apparaîtront ici',
+            style: const TextStyle(fontSize: 12),
+          ),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const MyRatingsScreen(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

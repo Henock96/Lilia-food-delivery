@@ -217,6 +217,61 @@ class _DeliveryDetailBody extends ConsumerWidget {
                 label: const Text('Accepter la mission'),
               ),
             ),
+            const SizedBox(height: 8),
+            // Refuser explicitement plutôt qu'ignorer : sans ce bouton, la
+            // mission restait assignée indéfiniment et le vendeur attendait
+            // une réponse qui ne venait pas.
+            OutlinedButton.icon(
+              onPressed: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Refuser cette mission ?'),
+                    content: const Text(
+                      'Elle sera proposée à un autre livreur et le vendeur '
+                      'en sera informé.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => ctx.pop(false),
+                        child: const Text('Annuler'),
+                      ),
+                      TextButton(
+                        onPressed: () => ctx.pop(true),
+                        child: const Text(
+                          'Refuser',
+                          style: TextStyle(color: AppColors.error),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed != true || !context.mounted) return;
+
+                try {
+                  await ref
+                      .read(
+                        deliveryDetailControllerProvider(deliveryId).notifier,
+                      )
+                      .declineDelivery();
+                  if (context.mounted) context.pop();
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Refus impossible : $e'),
+                        backgroundColor: AppColors.error,
+                      ),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.close),
+              label: const Text('Refuser'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.error,
+              ),
+            ),
           ],
           // Mission acceptée : le livreur va au restaurant. Tant qu'il n'a pas
           // confirmé la récupération, la commande n'est PAS annoncée « en
@@ -244,12 +299,24 @@ class _DeliveryDetailBody extends ConsumerWidget {
             ElevatedButton.icon(
               onPressed: () async {
                 try {
-                  await ref
+                  final locationIssue = await ref
                       .read(
                         deliveryDetailControllerProvider(deliveryId).notifier,
                       )
                       .confirmPickup();
                   ref.invalidate(deliveryDetailControllerProvider(deliveryId));
+
+                  // La récupération a réussi ; seule la localisation manque.
+                  // On le dit, sans bloquer la course.
+                  if (locationIssue != null && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(locationIssue.message),
+                        backgroundColor: AppColors.warning,
+                        duration: const Duration(seconds: 6),
+                      ),
+                    );
+                  }
                 } catch (e) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -350,11 +417,23 @@ class _DriverMapCardState extends ConsumerState<_DriverMapCard> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final svc = ref.read(locationServiceProvider);
       if (!svc.isTracking) {
-        final granted = await svc.requestPermission();
-        if (granted) {
+        // `requestPermissionDetailed` et non `requestPermission` : un refus
+        // rendu en simple booléen laissait la carte s'afficher, vide, sans que
+        // le livreur sache que sa position ne partait pas — et le client
+        // voyait un marqueur figé pendant toute la course.
+        final permission = await svc.requestPermissionDetailed();
+        if (permission.granted) {
           svc.startTracking(
             deliveryId: widget.deliveryId,
             orderId: widget.delivery.orderId,
+          );
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(permission.message),
+              backgroundColor: AppColors.warning,
+              duration: const Duration(seconds: 6),
+            ),
           );
         }
       }

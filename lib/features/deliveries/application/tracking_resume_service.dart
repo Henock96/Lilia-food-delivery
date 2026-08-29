@@ -5,6 +5,7 @@ import '../../../models/delivery.dart';
 import '../data/delivery_repository.dart';
 import 'connectivity_watcher.dart';
 import 'location_service.dart';
+import 'tracking_issue.dart';
 
 part 'tracking_resume_service.g.dart';
 
@@ -71,11 +72,29 @@ class TrackingResumeService with WidgetsBindingObserver {
       // Reprend le tracking sur la 1ère mission EN_TRANSIT
       // (en pratique un livreur n'a qu'une livraison active à la fois)
       final mission = active.first;
-      final granted = await _location.requestPermission();
-      if (!granted) {
-        debugPrint('[TrackingResume] permission GPS refusée');
+      final permission = await _location.requestPermissionDetailed();
+      if (!permission.granted) {
+        // Ce service n'a pas de `BuildContext` : il ne peut rien afficher
+        // lui-même. Il publie donc l'interruption dans un état observable, que
+        // `TrackingIssueBanner` rend visible par-dessus le routeur.
+        //
+        // Sans cela, le refus n'allait que dans les logs : le livreur reprenait
+        // sa course en croyant être suivi, et le client regardait un marqueur
+        // figé jusqu'à la sonnette. Ni l'un ni l'autre ne pouvait s'en rendre
+        // compte — c'est précisément le genre de panne qui doit se voir.
+        _ref
+            .read(trackingIssueControllerProvider.notifier)
+            .report(permission, deliveryId: mission.id);
+
+        debugPrint(
+          '[TrackingResume] tracking non repris — ${permission.reason?.name} : '
+          '${permission.message}',
+        );
         return;
       }
+
+      // Reprise réussie : on lève une éventuelle alerte précédente.
+      _ref.read(trackingIssueControllerProvider.notifier).clear();
       _location.startTracking(deliveryId: mission.id, orderId: mission.orderId);
       debugPrint('[TrackingResume] tracking repris pour mission ${mission.id}');
     } catch (e) {

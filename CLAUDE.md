@@ -323,7 +323,26 @@ Le helper `_decodeDelivery` / `_decodeUser` dans `delivery_repository.dart` gèr
   `markDelivered` / `markFailed`
 - `TrackingResumeService` ne reprend le tracking que sur les missions
   `EN_TRANSIT` — surtout pas `ACCEPTER`, pour la même raison
-- Permission GPS : refus partiel → tracking échoue silencieusement (pas d'UX feedback)
+- Permission GPS : `requestPermissionDetailed()` partout où un écran peut
+  afficher le motif (récupération, carte de course). Le booléen
+  `requestPermission()` avalait le refus : le livreur croyait être suivi, le
+  client voyait un marqueur figé.
+  Le refus remonte dans `trackingIssueControllerProvider`
+  (`application/tracking_issue.dart`), que `TrackingIssueBanner` affiche
+  **au-dessus du routeur** (`MaterialApp.router(builder:)`) — et non dans le
+  shell, sans quoi il serait invisible sur l'écran de détail, là où le livreur
+  passe sa course. `TrackingResumeService` n'a pas de `BuildContext` : publier
+  un état observable est le seul moyen pour lui de se faire entendre.
+  Le bandeau **n'a pas de bouton de fermeture** : la cause dure tant qu'elle
+  n'est pas traitée, et un bandeau qu'on peut écarter finit écarté. Il disparaît
+  seul quand le suivi repart ou quand la course se termine. L'action proposée
+  suit le motif : « Activer » (GPS éteint) → réglages de localisation,
+  « Réglages » (refus définitif) → fiche de l'app, « Autoriser » (refus
+  ponctuel) → nouvelle demande sur place.
+- `MissionsController.confirmPickup` a été **supprimé** (29/08/2026) : jamais
+  appelé, il dupliquait la logique de `DeliveryDetailController` avec l'ancien
+  `requestPermission()`. Un duplicat mort conserve le bug qu'on vient de
+  corriger, prêt à resurgir au premier branchement.
 
 ---
 

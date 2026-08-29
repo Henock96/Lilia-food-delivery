@@ -34,15 +34,46 @@ class LocationService {
   LocationService(this._repo, this._ws, this._ref);
 
   Future<bool> requestPermission() async {
+    return (await requestPermissionDetailed()).granted;
+  }
+
+  /// Variante qui dit **pourquoi** la localisation n'est pas disponible.
+  ///
+  /// `requestPermission()` renvoyait un simple `false` : l'appelant ne
+  /// démarrait pas le tracking et n'affichait rien. Le livreur croyait donc
+  /// être suivi alors qu'aucune position ne partait — et le client voyait un
+  /// marqueur figé sans explication. Un refus doit se dire, et se dire
+  /// précisément : couper le GPS et refuser l'autorisation n'appellent pas la
+  /// même action de l'utilisateur.
+  Future<LocationPermissionResult> requestPermissionDetailed() async {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return false;
+    if (!serviceEnabled) {
+      return const LocationPermissionResult(
+        granted: false,
+        reason: LocationDenialReason.serviceDisabled,
+      );
+    }
 
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
-    return permission == LocationPermission.whileInUse ||
+
+    if (permission == LocationPermission.deniedForever) {
+      return const LocationPermissionResult(
+        granted: false,
+        reason: LocationDenialReason.deniedForever,
+      );
+    }
+
+    final granted =
+        permission == LocationPermission.whileInUse ||
         permission == LocationPermission.always;
+
+    return LocationPermissionResult(
+      granted: granted,
+      reason: granted ? null : LocationDenialReason.denied,
+    );
   }
 
   /// Démarre le tracking pour la livraison + commande.
@@ -132,3 +163,41 @@ LocationService locationService(Ref ref) => LocationService(
   ref.watch(trackingSocketServiceProvider),
   ref,
 );
+
+
+/// Pourquoi la position n'est pas disponible.
+///
+/// Chaque cas appelle une action différente de la part du livreur : rallumer
+/// la localisation, réessayer, ou passer par les réglages système. Les
+/// confondre en un seul `false` ne lui permettait de rien faire.
+enum LocationDenialReason {
+  /// La localisation de l'appareil est éteinte.
+  serviceDisabled,
+
+  /// Refus ponctuel : redemander est possible.
+  denied,
+
+  /// Refus définitif : seul un passage par les réglages système débloque.
+  deniedForever,
+}
+
+class LocationPermissionResult {
+  const LocationPermissionResult({required this.granted, this.reason});
+
+  final bool granted;
+  final LocationDenialReason? reason;
+
+  /// Message affichable tel quel, formulé côté livreur.
+  String get message => switch (reason) {
+    LocationDenialReason.serviceDisabled =>
+      'La localisation de votre téléphone est désactivée. Activez-la pour '
+          'que le client puisse suivre sa commande.',
+    LocationDenialReason.deniedForever =>
+      'L\'accès à votre position est bloqué. Autorisez-le dans les réglages '
+          'du téléphone pour que le client puisse suivre sa commande.',
+    LocationDenialReason.denied =>
+      'Sans accès à votre position, le client ne pourra pas suivre sa '
+          'commande. Vous pouvez continuer la livraison normalement.',
+    null => '',
+  };
+}

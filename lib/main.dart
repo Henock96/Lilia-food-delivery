@@ -9,6 +9,7 @@ import 'features/deliveries/application/connectivity_watcher.dart';
 import 'features/deliveries/application/tracking_resume_service.dart';
 import 'routing/app_router.dart';
 import 'services/notification_service.dart';
+import 'features/deliveries/presentation/widgets/tracking_issue_banner.dart';
 import 'utilities/app_theme.dart';
 
 void main() async {
@@ -60,6 +61,12 @@ class _LiliaDeliveryAppState extends ConsumerState<LiliaDeliveryApp> {
       theme: AppTheme.theme,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
+      // Le bandeau « le client ne vous voit pas » vit au-dessus du routeur, et
+      // non dans le shell : le livreur passe sa course sur l'écran de détail,
+      // poussé par-dessus les onglets. Un bandeau logé dans le shell serait
+      // invisible exactement pendant les minutes où l'information compte.
+      builder: (context, child) =>
+          TrackingIssueBanner(child: child ?? const SizedBox.shrink()),
     );
   }
 }
