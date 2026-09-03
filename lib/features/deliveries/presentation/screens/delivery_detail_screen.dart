@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:lilia_food_delivery/models/location_precision.dart';
 import 'package:lilia_food_delivery/models/order.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../models/delivery.dart';
@@ -406,10 +407,29 @@ class _DriverMapCard extends ConsumerStatefulWidget {
   ConsumerState<_DriverMapCard> createState() => _DriverMapCardState();
 }
 
+/// Comportement de la caméra pendant une course.
+///
+/// La version précédente n'avait pas de mode : chaque point GPS appelait
+/// `animateCamera`, avec un filtre de 10 m sur la carte encartée et de 5 m en
+/// plein écran. À scooter, cela recentrait la carte plusieurs fois par seconde
+/// — le livreur ne pouvait ni regarder la destination, ni dézoomer, ni faire
+/// quoi que ce soit. C'était le symptôme numéro un de « Maps ne marche pas ».
+enum _CameraMode {
+  /// La caméra suit le livreur. État initial.
+  following,
+
+  /// Le livreur a pris la main : la caméra ne bouge plus toute seule.
+  exploring,
+}
+
 class _DriverMapCardState extends ConsumerState<_DriverMapCard> {
   GoogleMapController? _mapController;
   StreamSubscription<Position>? _positionSub;
   LatLng? _livePosition;
+  _CameraMode _cameraMode = _CameraMode.following;
+
+  /// Vrai le temps d'un mouvement de caméra déclenché par le code.
+  bool _selfDrivenCameraMove = false;
 
   @override
   void initState() {
@@ -457,17 +477,54 @@ class _DriverMapCardState extends ConsumerState<_DriverMapCard> {
         ).listen((pos) {
           if (!mounted) return;
           setState(() => _livePosition = LatLng(pos.latitude, pos.longitude));
-          _mapController?.animateCamera(CameraUpdate.newLatLng(_livePosition!));
+          // Le GPS continue de tourner dans les deux modes ; seule la caméra
+          // change de comportement. En EXPLORING on ne la touche pas.
+          if (_cameraMode == _CameraMode.following) {
+            // Le drapeau est indispensable : sans lui, `onCameraMoveStarted`
+            // prend ce recentrage pour un geste du livreur et bascule en
+            // EXPLORING dès le premier point GPS — le suivi automatique ne
+            // fonctionne alors jamais sur cette carte.
+            _selfDrivenCameraMove = true;
+            _mapController?.animateCamera(
+              CameraUpdate.newLatLng(_livePosition!),
+            );
+          }
         });
+  }
+
+  /// Le livreur a déplacé la carte : on lâche la caméra.
+  ///
+  /// `onCameraMoveStarted` ne distingue pas un geste d'un `animateCamera`
+  /// programmatique. On s'appuie donc sur un drapeau posé juste avant chaque
+  /// animation : sans lui, notre propre recentrage déclencherait le passage en
+  /// EXPLORING au premier point GPS reçu, et le suivi ne fonctionnerait jamais.
+  void _onCameraMoveStarted() {
+    if (_selfDrivenCameraMove) {
+      _selfDrivenCameraMove = false;
+      return;
+    }
+    if (_cameraMode == _CameraMode.following) {
+      setState(() => _cameraMode = _CameraMode.exploring);
+    }
+  }
+
+  void _recenter() {
+    final target = _effectivePosition;
+    if (target == null) return;
+    setState(() => _cameraMode = _CameraMode.following);
+    _selfDrivenCameraMove = true;
+    _mapController?.animateCamera(CameraUpdate.newLatLng(target));
   }
 
   void _fitBoth(LatLng driver) {
     if (_mapController == null) return;
     final client = _clientPos;
     if (client == null) {
+      _selfDrivenCameraMove = true;
       _mapController!.animateCamera(CameraUpdate.newLatLng(driver));
       return;
     }
+    _selfDrivenCameraMove = true;
     _mapController!.animateCamera(
       CameraUpdate.newLatLngBounds(
         LatLngBounds(
@@ -609,54 +666,43 @@ class _DriverMapCardState extends ConsumerState<_DriverMapCard> {
           SizedBox(
             height: 320,
             child: pos != null
-                ? GoogleMap(
-                    initialCameraPosition: CameraPosition(
-                      target: pos,
-                      zoom: 14,
-                    ),
-                    onMapCreated: (c) {
-                      _mapController = c;
-                      Future.delayed(
-                        const Duration(milliseconds: 300),
-                        () => _fitBoth(pos),
-                      );
-                    },
-                    markers: _buildMarkers(pos),
-                    polylines: _buildPolylines(pos),
-                    myLocationEnabled: true,
-                    myLocationButtonEnabled: true,
-                    zoomControlsEnabled: true,
-                    mapToolbarEnabled: false,
+                ? Stack(
+                    children: [
+                      GoogleMap(
+                        initialCameraPosition: CameraPosition(
+                          target: pos,
+                          zoom: 14,
+                        ),
+                        onMapCreated: (c) {
+                          _mapController = c;
+                          Future.delayed(
+                            const Duration(milliseconds: 300),
+                            () => _fitBoth(pos),
+                          );
+                        },
+                        onCameraMoveStarted: _onCameraMoveStarted,
+                        markers: _buildMarkers(pos),
+                        polylines: _buildPolylines(pos),
+                        myLocationEnabled: true,
+                        // Le bouton natif recentre sans passer par nous : il
+                        // laisserait la caméra en EXPLORING tout en la
+                        // déplaçant, donc deux sources de vérité. On expose le
+                        // nôtre à la place.
+                        myLocationButtonEnabled: false,
+                        zoomControlsEnabled: true,
+                        mapToolbarEnabled: false,
+                      ),
+                      if (_cameraMode == _CameraMode.exploring)
+                        Positioned(
+                          right: 12,
+                          bottom: 12,
+                          child: _RecenterButton(onPressed: _recenter),
+                        ),
+                    ],
                   )
                 : const _NoGpsPlaceholder(),
           ),
-          if (dest != null && dest.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.location_on,
-                    color: AppColors.primary,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Destination : ',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-                  Expanded(
-                    child: Text(
-                      dest,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textMed,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          _DestinationPanel(order: widget.delivery.order, address: dest),
         ],
       ),
     );
@@ -736,6 +782,8 @@ class _FullscreenDriverMapScreenState
   GoogleMapController? _mapController;
   StreamSubscription<Position>? _positionSub;
   LatLng? _livePosition;
+  _CameraMode _cameraMode = _CameraMode.following;
+  bool _selfDrivenCameraMove = false;
 
   @override
   void initState() {
@@ -759,8 +807,31 @@ class _FullscreenDriverMapScreenState
         ).listen((pos) {
           if (!mounted) return;
           setState(() => _livePosition = LatLng(pos.latitude, pos.longitude));
-          _mapController?.animateCamera(CameraUpdate.newLatLng(_livePosition!));
+          if (_cameraMode == _CameraMode.following) {
+            _selfDrivenCameraMove = true;
+            _mapController?.animateCamera(
+              CameraUpdate.newLatLng(_livePosition!),
+            );
+          }
         });
+  }
+
+  void _onCameraMoveStarted() {
+    if (_selfDrivenCameraMove) {
+      _selfDrivenCameraMove = false;
+      return;
+    }
+    if (_cameraMode == _CameraMode.following) {
+      setState(() => _cameraMode = _CameraMode.exploring);
+    }
+  }
+
+  void _recenter() {
+    final target = _livePosition;
+    if (target == null) return;
+    setState(() => _cameraMode = _CameraMode.following);
+    _selfDrivenCameraMove = true;
+    _mapController?.animateCamera(CameraUpdate.newLatLng(target));
   }
 
   @override
@@ -803,24 +874,37 @@ class _FullscreenDriverMapScreenState
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text(e.toString())),
         data: (delivery) {
-          final fallback = delivery.lastLatitude != null
-              ? LatLng(delivery.lastLatitude!, delivery.lastLongitude!)
-              : const LatLng(-4.26778, 15.2753);
-          final mapPos = pos ?? fallback;
+          // Dernière position connue du livreur, ou rien. Le repli codé en
+          // dur sur Brazzaville a disparu : il posait un marqueur « Vous » au
+          // centre-ville quand aucune position n'était connue, ce qui est
+          // faux et se voyait comme vrai.
+          final driverPos = pos ??
+              (delivery.lastLatitude != null && delivery.lastLongitude != null
+                  ? LatLng(delivery.lastLatitude!, delivery.lastLongitude!)
+                  : null);
+          final clientPos = delivery.order?.clientLatitude != null &&
+                  delivery.order?.clientLongitude != null
+              ? LatLng(
+                  delivery.order!.clientLatitude!,
+                  delivery.order!.clientLongitude!,
+                )
+              : null;
+          // Cadrage : livreur > client > centre-ville. Le dernier n'est qu'un
+          // cadrage, aucun marqueur n'y est posé.
+          final mapPos =
+              driverPos ?? clientPos ?? const LatLng(-4.26778, 15.2753);
           final dest = delivery.order?.adresse?.formatted;
 
           return Stack(
             children: [
               GoogleMap(
                 initialCameraPosition: CameraPosition(target: mapPos, zoom: 14),
+                onCameraMoveStarted: _onCameraMoveStarted,
                 onMapCreated: (c) {
                   _mapController = c;
-                  if (delivery.order?.clientLatitude != null) {
-                    final clientPos = LatLng(
-                      delivery.order!.clientLatitude!,
-                      delivery.order!.clientLongitude!,
-                    );
+                  if (clientPos != null && driverPos != null) {
                     Future.delayed(const Duration(milliseconds: 400), () {
+                      _selfDrivenCameraMove = true;
                       _mapController?.animateCamera(
                         CameraUpdate.newLatLngBounds(
                           LatLngBounds(
@@ -856,41 +940,41 @@ class _FullscreenDriverMapScreenState
                   }
                 },
                 markers: {
-                  Marker(
-                    markerId: const MarkerId('driver'),
-                    position: mapPos,
-                    icon: BitmapDescriptor.defaultMarkerWithHue(
-                      BitmapDescriptor.hueOrange,
+                  if (driverPos != null)
+                    Marker(
+                      markerId: const MarkerId('driver'),
+                      position: driverPos,
+                      icon: BitmapDescriptor.defaultMarkerWithHue(
+                        BitmapDescriptor.hueOrange,
+                      ),
+                      infoWindow: const InfoWindow(title: 'Vous'),
                     ),
-                    infoWindow: const InfoWindow(title: 'Vous'),
-                  ),
-                  if (delivery.order?.clientLatitude != null)
+                  if (clientPos != null)
                     Marker(
                       markerId: const MarkerId('client'),
-                      position: LatLng(
-                        delivery.order!.clientLatitude!,
-                        delivery.order!.clientLongitude!,
-                      ),
+                      position: clientPos,
                       icon: BitmapDescriptor.defaultMarkerWithHue(
-                        BitmapDescriptor.hueBlue,
+                        // Le bleu franc reste réservé à une position exacte ;
+                        // un centroïde de quartier prend une teinte distincte.
+                        delivery.order!.clientLocationPrecision ==
+                                LocationPrecision.exact
+                            ? BitmapDescriptor.hueBlue
+                            : BitmapDescriptor.hueAzure,
                       ),
                       infoWindow: InfoWindow(
                         title: 'Client',
-                        snippet: delivery.order?.adresse?.formatted ?? '',
+                        snippet: delivery.order!.clientLocationPrecision ==
+                                LocationPrecision.exact
+                            ? (delivery.order?.adresse?.formatted ?? '')
+                            : 'Position approximative — appelez',
                       ),
                     ),
                 },
-                polylines: delivery.order?.clientLatitude != null
+                polylines: (clientPos != null && driverPos != null)
                     ? {
                         Polyline(
                           polylineId: const PolylineId('route'),
-                          points: [
-                            mapPos,
-                            LatLng(
-                              delivery.order!.clientLatitude!,
-                              delivery.order!.clientLongitude!,
-                            ),
-                          ],
+                          points: [driverPos, clientPos],
                           color: const Color(0xFF1565C0),
                           width: 5,
                           patterns: [PatternItem.dash(20), PatternItem.gap(10)],
@@ -902,6 +986,12 @@ class _FullscreenDriverMapScreenState
                 zoomControlsEnabled: true,
                 mapToolbarEnabled: false,
               ),
+              if (_cameraMode == _CameraMode.exploring && _livePosition != null)
+                Positioned(
+                  right: 12,
+                  top: 100,
+                  child: _RecenterButton(onPressed: _recenter),
+                ),
               // Panel infos en bas
               Positioned(
                 bottom: 0,
@@ -1279,4 +1369,152 @@ class _PhoneRow extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// Bouton « recentrer », visible uniquement quand le livreur a repris la main
+/// sur la caméra.
+///
+/// Il n'apparaît pas en mode `following` : un bouton qui ne ferait rien
+/// apprendrait au livreur à l'ignorer, et il serait alors inutile le jour où
+/// il compte.
+class _RecenterButton extends StatelessWidget {
+  const _RecenterButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      shape: const CircleBorder(),
+      elevation: 4,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onPressed,
+        child: const Padding(
+          padding: EdgeInsets.all(10),
+          child: Icon(
+            Icons.my_location,
+            size: 22,
+            color: AppColors.primary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Où livrer, et à quel point on peut s'y fier.
+///
+/// Le livreur avait auparavant une ligne « Destination : {texte} » et rien
+/// d'autre. Deux informations lui manquaient, et ce sont les deux qui
+/// comptent à Brazzaville :
+///
+///  * **la fiabilité du point** — un centroïde de quartier et une porte posée
+///    à la main s'affichaient exactement pareil sur la carte ;
+///  * **les repères du client** — « portail bleu face à la pharmacie » situe
+///    souvent mieux qu'un nom de rue.
+class _DestinationPanel extends StatelessWidget {
+  const _DestinationPanel({required this.order, required this.address});
+
+  final DeliveryOrder? order;
+  final String? address;
+
+  @override
+  Widget build(BuildContext context) {
+    if (order == null) return const SizedBox.shrink();
+    final precision = order!.clientLocationPrecision;
+    final landmark = order!.clientLandmark;
+    final hasAddress = address != null && address!.isNotEmpty;
+
+    if (!hasAddress && landmark == null && precision.hasPosition) {
+      return const SizedBox.shrink();
+    }
+
+    final warn = precision != LocationPrecision.exact;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.location_on,
+                color: AppColors.primary,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Destination : ',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              Expanded(
+                child: Text(
+                  hasAddress ? address! : 'Adresse non renseignée',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textMed,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (landmark != null && landmark.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.info_outline, size: 16, color: AppColors.textMed),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    landmark,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontStyle: FontStyle.italic,
+                      color: AppColors.textMed,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (warn) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.gps_not_fixed,
+                    size: 15,
+                    color: AppColors.warning,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      precision.label,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.warning,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }

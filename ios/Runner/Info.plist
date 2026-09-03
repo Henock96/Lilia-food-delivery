@@ -64,6 +64,18 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+		<!-- Suivi pendant une course, écran verrouillé.
+
+		     Sans ce mode, iOS suspend l'app dès qu'elle quitte le premier plan
+		     et aucune position ne part : le livreur roulait, le client voyait
+		     un marqueur figé. Le mode est activé au démarrage d'une course
+		     (`allowBackgroundLocationUpdates`) et coupé à son terme — il n'est
+		     pas permanent.
+
+		     `NSLocationAlwaysAndWhenInUseUsageDescription` était déjà déclarée
+		     mais restait inopérante sans ce mode : la permission « Toujours »
+		     ne sert à rien à une app qu'iOS met en veille. -->
+		<string>location</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>

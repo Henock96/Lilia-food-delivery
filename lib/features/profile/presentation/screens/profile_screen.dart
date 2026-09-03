@@ -37,6 +37,7 @@ class _ProfileBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final profile = user.driverProfile;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -101,7 +102,103 @@ class _ProfileBody extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
 
-          // Info card
+          // Bandeau d'explication quand le livreur ne peut PAS recevoir de
+          // course. Sans lui, une liste de missions vide est indiscernable
+          // d'une journée creuse : le livreur attend sans savoir qu'il attend
+          // pour rien.
+          if (!user.canReceiveMissions) ...[
+            _BlockedBanner(user: user),
+            const SizedBox(height: 12),
+          ],
+
+          // Informations professionnelles — vides jusqu'à septembre 2026 :
+          // l'écran ne montrait que « Rôle : Livreur » et un « Statut compte :
+          // Actif » écrit en dur, affiché tel quel même sur un compte suspendu.
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.badge_outlined, color: AppColors.primary),
+                      SizedBox(width: 8),
+                      Text(
+                        'Informations professionnelles',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (profile == null)
+                    const Text(
+                      'Profil non renseigné. Contactez l\'administration : sans '
+                      'profil livreur, aucune course ne peut vous être confiée.',
+                      style: TextStyle(color: AppColors.textMed, fontSize: 13),
+                    )
+                  else ...[
+                    _InfoTile(
+                      icon: Icons.two_wheeler_outlined,
+                      label: 'Véhicule',
+                      value: profile.vehicleType.label,
+                    ),
+                    if (profile.plateNumber != null) ...[
+                      const Divider(),
+                      _InfoTile(
+                        icon: Icons.confirmation_number_outlined,
+                        label: 'Immatriculation',
+                        value: profile.plateNumber!,
+                      ),
+                    ],
+                    if (profile.licenseNumber != null) ...[
+                      const Divider(),
+                      _InfoTile(
+                        icon: Icons.card_membership_outlined,
+                        label: 'Permis',
+                        value: profile.licenseNumber!,
+                      ),
+                    ],
+                    if (profile.licenseExpiry != null) ...[
+                      const Divider(),
+                      _InfoTile(
+                        icon: Icons.event_outlined,
+                        label: 'Expiration du permis',
+                        value: _formatDate(profile.licenseExpiry!),
+                        // Alerte 30 jours avant : le livreur est le mieux placé
+                        // pour renouveler, encore faut-il le prévenir avant
+                        // qu'une course lui soit refusée.
+                        iconColor: profile.licenseExpiringSoon
+                            ? AppColors.error
+                            : AppColors.textMed,
+                      ),
+                    ],
+                    const Divider(),
+                    _InfoTile(
+                      icon: Icons.map_outlined,
+                      label: 'Zone',
+                      value: profile.zones.isEmpty
+                          ? 'Toute la ville'
+                          : profile.zones.join(', '),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Les TROIS statuts, séparément.
+          //
+          // Ils portent sur trois objets différents et sont décidés par trois
+          // acteurs : le compte par l'administration, le profil par
+          // l'administration également, la disponibilité par le livreur.
+          // « Compte actif, profil actif, hors ligne » décrit quelqu'un qui a
+          // fini sa journée — ce n'est ni une anomalie ni une sanction, et les
+          // fondre en un seul « statut » obligerait à choisir lequel ment.
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -115,9 +212,22 @@ class _ProfileBody extends ConsumerWidget {
                   const Divider(),
                   _InfoTile(
                     icon: Icons.circle,
-                    label: 'Statut compte',
-                    value: 'Actif',
-                    iconColor: AppColors.success,
+                    label: 'Statut du compte',
+                    value: user.statusUser.label,
+                    iconColor: user.statusUser.isUsable
+                        ? AppColors.success
+                        : AppColors.error,
+                  ),
+                  const Divider(),
+                  _InfoTile(
+                    icon: Icons.verified_outlined,
+                    label: 'Profil livreur',
+                    value: profile == null
+                        ? 'Non renseigné'
+                        : (profile.isActive ? 'Actif' : 'Inactif'),
+                    iconColor: (profile?.isActive ?? false)
+                        ? AppColors.success
+                        : AppColors.error,
                   ),
                 ],
               ),
@@ -272,3 +382,53 @@ class _RatingSummaryTile extends ConsumerWidget {
     );
   }
 }
+
+/// Explique pourquoi la liste de missions restera vide.
+///
+/// Le serveur refuse d'assigner une course à un livreur dont le compte est
+/// suspendu ou le profil hors service (`assertAssignable`). Sans ce bandeau,
+/// l'application se contente d'une liste vide : le livreur attend une mission
+/// qui ne viendra jamais, sans qu'aucun écran ne le lui dise.
+class _BlockedBanner extends StatelessWidget {
+  final AppUser user;
+  const _BlockedBanner({required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    final compteHS = !user.statusUser.isUsable;
+    final message = compteHS
+        ? 'Votre compte est ${user.statusUser.label.toLowerCase()}. '
+              'Contactez l\'administration Lilia Food.'
+        : user.driverProfile == null
+        ? 'Votre profil livreur n\'est pas encore créé. '
+              'Aucune course ne peut vous être confiée.'
+        : 'Votre profil livreur est inactif. '
+              'Contactez l\'administration pour le réactiver.';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.error.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(fontSize: 13, color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatDate(DateTime d) =>
+    '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';

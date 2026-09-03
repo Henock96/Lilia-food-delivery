@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../models/delivery.dart';
 import '../../../models/app_user.dart';
 
@@ -32,13 +33,26 @@ class DeliveryRepository {
     return Delivery.fromJson(payload);
   }
 
+  /// Déballe les enveloppes du backend jusqu'à l'objet utilisateur.
+  ///
+  /// ⚠️ Il y en a **deux** sur `GET /users/me` : le contrôleur renvoie
+  /// `{ user }`, que l'intercepteur global enveloppe en `{ data: { user } }`.
+  /// L'ancienne version n'en retirait qu'une seule et rendait donc
+  /// `AppUser.fromJson({ user: … })` — tous les champs absents, `nom` retombant
+  /// sur son défaut « Livreur ». Le profil affichait ce mot pour tout le monde.
+  ///
+  /// La boucle tolère les deux ordres et les deux profondeurs : une app
+  /// déployée continue de fonctionner si le backend aplatit sa réponse.
   AppUser _toUser(dynamic decoded) {
-    final json = _asObject(decoded);
-    final payload = json['user'] is Map<String, dynamic>
-        ? json['user'] as Map<String, dynamic>
-        : json['data'] is Map<String, dynamic>
-        ? json['data'] as Map<String, dynamic>
-        : json;
+    var payload = _asObject(decoded);
+    for (var i = 0; i < 3; i++) {
+      final inner = payload['data'] ?? payload['user'];
+      if (inner is Map<String, dynamic>) {
+        payload = inner;
+      } else {
+        break;
+      }
+    }
     return AppUser.fromJson(payload);
   }
 
@@ -151,9 +165,41 @@ class DeliveryRepository {
     }
   }
 
-  /// GET /users/me — profil du livreur connecté
+  /// GET /drivers/me — compte **et** profil métier du livreur connecté.
+  ///
+  /// Remplace `GET /users/me`, qui ne portait ni `statusUser` ni le profil
+  /// métier : l'écran ne pouvait donc afficher que « Actif » écrit en dur.
+  /// Repli sur `/users/me` si le backend n'expose pas encore la route — une
+  /// app publiée ne doit pas devenir inutilisable parce que le serveur est en
+  /// retard d'un déploiement.
   Future<AppUser> getMe() async {
-    final res = await _api.getJson('/users/me');
+    try {
+      final res = await _api.getJson('/drivers/me');
+      return _toUser(res.data);
+    } on ApiException catch (e) {
+      if (e.statusCode != 404) rethrow;
+      final res = await _api.getJson('/users/me');
+      return _toUser(res.data);
+    }
+  }
+
+  /// PATCH /drivers/me — le livreur corrige son nom, son téléphone ou sa photo.
+  ///
+  /// Volontairement limité à ces trois champs : véhicule, plaque, permis et
+  /// zones sont vérifiés par l'administration, les laisser modifier ici
+  /// viderait la vérification de son sens.
+  Future<AppUser> updateMe({
+    String? nom,
+    String? phone,
+    String? imageUrl,
+  }) async {
+    final res = await _api.patchJson(
+      '/drivers/me',
+      // Seuls les champs réellement fournis partent : un `null` explicite
+      // effacerait la valeur côté serveur, ce qui n'est pas l'intention d'un
+      // formulaire dont on n'a touché qu'un champ.
+      body: {'nom': ?nom, 'phone': ?phone, 'imageUrl': ?imageUrl},
+    );
     return _toUser(res.data);
   }
 }

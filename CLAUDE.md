@@ -410,7 +410,84 @@ Résultat : `flutter analyze` **0 erreur / 0 warning**, tests **21/21**.
       push iOS n'arrive
 - [ ] Basculer `aps-environment` sur `production` dans
       `ios/Runner/RunnerRelease.entitlements` avant distribution App Store
-- [ ] Remplacer `YOUR_GOOGLE_MAPS_API_KEY` dans `AndroidManifest.xml` + `AppDelegate.swift`
-- [ ] Permission `ACCESS_BACKGROUND_LOCATION` Android + `NSLocationAlwaysAndWhenInUseUsageDescription` iOS si tracking arrière-plan
-- [ ] **Tracking arrière-plan complet** : utiliser `flutter_background_geolocation` (payant) ou foreground service Android pour continuer à envoyer la position si l'app est complètement fermée (le `TrackingResumeService` actuel ne couvre que pause/resume foreground)
+- [ ] Créer les 6 clés Maps restreintes et révoquer les 2 actuelles — voir
+      `lilia-backend/docs/01-architecture/google-maps-keys.md`. Le build de
+      release échoue désormais si la clé est absente.
+- [x] ~~Tracking arrière-plan~~ — fait le 01/09/2026 via un service de premier
+      plan Android (`geolocator`) + `UIBackgroundModes: location` iOS, sans
+      dépendance payante. Voir la section dédiée plus bas.
+      ⚠️ Reste hors de portée : l'app **complètement fermée** (force-stop ou
+      tuée par l'OS). Aucune solution Flutter n'y répond sans un service
+      redémarré au boot, hors périmètre.
 - [ ] **Sync offline batch** : utiliser `POST /tracking/position/batch` quand le réseau revient après une coupure (positions accumulées localement entre-temps)
+
+---
+
+## Destination, caméra et suivi en arrière-plan (1er septembre 2026)
+
+### La destination vient de la commande
+
+`DeliveryOrder.clientLatitude/Longitude` sont désormais résolus par le serveur
+depuis l'adresse du client — plus le GPS de son téléphone au moment de commander.
+Deux champs les accompagnent :
+
+- `clientLocationPrecision` (`exact` / `approximate` / `unknown`) — décide de ce
+  que le livreur doit faire en arrivant : viser le point, ou appeler ;
+- `clientLandmark` — « portail bleu face à la pharmacie ». À Brazzaville, souvent
+  la seule information qui situe réellement une porte.
+
+`_DestinationPanel` affiche les trois. Aucun marqueur n'est posé si la position
+est inconnue, et le repli codé en dur sur le centre de Brazzaville a disparu des
+deux cartes.
+
+### Caméra : `FOLLOWING` / `EXPLORING`
+
+Chaque point GPS appelait `animateCamera` (filtre 10 m encarté, 5 m plein
+écran). À scooter, la carte se recentrait plusieurs fois par seconde : le
+livreur ne pouvait ni regarder la destination, ni dézoomer. C'était le symptôme
+numéro un de « Maps ne marche pas ».
+
+Désormais : `FOLLOWING` au départ, bascule en `EXPLORING` au premier geste,
+bouton « recentrer » pour revenir. **Le GPS continue de tourner dans les deux
+modes** — seule la caméra change.
+
+⚠️ `onCameraMoveStarted` ne distingue pas un geste d'un `animateCamera`
+programmatique. Un drapeau `_selfDrivenCameraMove` est posé juste avant chaque
+animation ; sans lui, notre propre recentrage ferait basculer en `EXPLORING` au
+premier point reçu et le suivi ne marcherait jamais.
+
+### Suivi écran éteint
+
+`LocationService` n'utilise plus `Timer.periodic` + `getCurrentPosition` : les
+deux sont suspendus par Android et iOS dès que l'app quitte le premier plan. Le
+suivi s'arrêtait donc quand le livreur rangeait son téléphone — c'est-à-dire
+pendant à peu près toute la course.
+
+Un `getPositionStream` avec réglages par plateforme le remplace :
+
+- **Android** : `ForegroundNotificationConfig` → service de premier plan de type
+  `location`, notification persistante. Permissions `FOREGROUND_SERVICE` et
+  `FOREGROUND_SERVICE_LOCATION` au manifeste.
+  ⚠️ `ACCESS_BACKGROUND_LOCATION` n'est **délibérément pas** demandée : un
+  service de premier plan reçoit les positions sans elle. La demander imposerait
+  un second dialogue système hors de l'app et une justification Play Store, pour
+  une capacité inutile — on ne suit jamais un livreur hors course.
+- **iOS** : `allowBackgroundLocationUpdates` + `UIBackgroundModes: location`
+  dans `Info.plist`. `NSLocationAlwaysAndWhenInUseUsageDescription` était déjà
+  déclarée mais **inopérante** sans ce mode.
+  `showBackgroundLocationIndicator: true` — le bandeau bleu : le livreur sait
+  qu'il est suivi. `pauseLocationUpdatesAutomatically: false` — une pause iOS
+  est indistinguable d'une panne côté client.
+
+Publication throttlée (5 s minimum) + battement (20 s) : un livreur arrêté à un
+feu n'émet aucun point avec un filtre de distance, et les métadonnées Redis
+expirent au bout de 5 minutes. 1 écriture HTTP sur 3 publications.
+
+### Token WebSocket
+
+`reconnect()` existait et n'était **jamais appelé**. Le token Firebase, capturé
+à l'ouverture du socket, expire au bout d'une heure ; Socket.io rejouait le même
+à chaque reconnexion, la gateway déconnectait en boucle, et le repli HTTP
+prenait le relais toutes les 5 s — panne invisible, au prix de la batterie et
+des requêtes. Le correctif existait côté app cliente depuis août (C3) sans avoir
+été porté ici. `firebaseIdTokenProvider` (nouveau) déclenche la reconnexion.

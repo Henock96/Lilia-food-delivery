@@ -82,3 +82,41 @@ final class AuthStateChangeProvider
 }
 
 String _$authStateChangeHash() => r'226bc77a3d2a69815a3618d9841da696a41d6adc';
+
+/// Jeton d'identité courant, réémis à chaque renouvellement Firebase.
+
+@ProviderFor(firebaseIdToken)
+final firebaseIdTokenProvider = FirebaseIdTokenProvider._();
+
+/// Jeton d'identité courant, réémis à chaque renouvellement Firebase.
+
+final class FirebaseIdTokenProvider
+    extends $FunctionalProvider<AsyncValue<String?>, String?, Stream<String?>>
+    with $FutureModifier<String?>, $StreamProvider<String?> {
+  /// Jeton d'identité courant, réémis à chaque renouvellement Firebase.
+  FirebaseIdTokenProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'firebaseIdTokenProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$firebaseIdTokenHash();
+
+  @$internal
+  @override
+  $StreamProviderElement<String?> $createElement($ProviderPointer pointer) =>
+      $StreamProviderElement(pointer);
+
+  @override
+  Stream<String?> create(Ref ref) {
+    return firebaseIdToken(ref);
+  }
+}
+
+String _$firebaseIdTokenHash() => r'8b1dc460d841d7f8d534850716aa5964c6de1b9b';

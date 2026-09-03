@@ -1,4 +1,6 @@
 import 'package:intl/intl.dart';
+
+import 'location_precision.dart';
 import 'package:lilia_food_delivery/models/vendor_type.dart';
 
 class DeliveryRestaurant {
@@ -76,8 +78,20 @@ class DeliveryOrder {
   final DeliveryRestaurant? restaurant;
   final List<OrderItem> items;
   final DeliveryAddress? adresse;
+  /// Destination de la course, résolue par le serveur depuis l'adresse du
+  /// client — ce n'est **plus** la position de son téléphone au moment de
+  /// commander.
   final double? clientLatitude;
   final double? clientLongitude;
+
+  /// Fiabilité de cette destination. Décide de ce que le livreur doit faire
+  /// en arrivant : viser le point, ou appeler.
+  final LocationPrecision clientLocationPrecision;
+
+  /// Repères saisis par le client : « portail bleu face à la pharmacie ». À
+  /// Brazzaville, souvent la seule information qui situe réellement une porte.
+  final String? clientLandmark;
+
   final String? clientNom;
   final String? clientPhone;
   final String? contactPhone;
@@ -94,6 +108,8 @@ class DeliveryOrder {
     this.adresse,
     this.clientLatitude,
     this.clientLongitude,
+    this.clientLocationPrecision = LocationPrecision.unknown,
+    this.clientLandmark,
     this.clientNom,
     this.clientPhone,
     this.contactPhone,
@@ -155,6 +171,10 @@ class DeliveryOrder {
       adresse: adresse,
       clientLatitude: _doubleValue(json['deliveryLatitude']),
       clientLongitude: _doubleValue(json['deliveryLongitude']),
+      clientLocationPrecision: LocationPrecision.fromWire(
+        _nullableString(json['deliveryPrecision']),
+      ),
+      clientLandmark: _nullableString(json['deliveryLandmark']),
       clientNom: _nullableString(user?['nom']),
       clientPhone: _nullableString(user?['phone']),
       contactPhone: _nullableString(json['contactPhone']),

@@ -4,6 +4,26 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Suivi pendant une course, écran éteint.
+
+         Sans service de premier plan, le `Timer` et le flux GPS de l'app sont
+         suspendus dès qu'elle quitte l'écran : le livreur roulait, le client
+         voyait un marqueur figé. Un service de premier plan avec notification
+         persistante est la façon dont Android autorise ce suivi, et la seule
+         qui soit honnête vis-à-vis du livreur — il voit en permanence que sa
+         position est transmise, et le service s'arrête avec la course.
+
+         ⚠️ `ACCESS_BACKGROUND_LOCATION` n'est délibérément **pas** demandée :
+         un service de premier plan de type `location` reçoit les positions
+         sans elle. La demander imposerait au livreur un second dialogue
+         système (« Toujours autoriser », hors de l'app sur Android 11+) et
+         une justification supplémentaire au Play Store, pour une capacité
+         dont on n'a pas besoin — on ne suit jamais un livreur hors course. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <!-- Android 14+ : refuse de démarrer un service `location` sans ce type. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <application
         android:label="Lilia Food Delivery"
         android:name="${applicationName}"
