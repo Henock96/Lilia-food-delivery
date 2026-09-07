@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:lilia_food_delivery/models/location_precision.dart';
 import 'package:lilia_food_delivery/models/order.dart';
+import 'package:lilia_food_delivery/utils/map_launcher.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../models/delivery.dart';
 import '../../../../utilities/app_theme.dart';
@@ -112,6 +113,18 @@ class _DeliveryDetailBody extends ConsumerWidget {
                   _InfoRow(label: 'Adresse', value: restaurant.adresse!),
                 if (restaurant.phone != null)
                   _PhoneRow(label: 'Téléphone', phone: restaurant.phone!),
+                // Première jambe de la course. Elle n'était guidable par
+                // aucun bouton : le livreur lisait l'adresse du comptoir puis
+                // la retapait à la main dans Google Maps.
+                if (restaurant.hasPosition || restaurant.adresse != null)
+                  _NavigateButton(
+                    latitude: restaurant.latitude,
+                    longitude: restaurant.longitude,
+                    address: restaurant.adresse,
+                    label: restaurant.hasPosition
+                        ? 'Naviguer vers ${restaurant.vendorType.pickupLocationLabel}'
+                        : "Rechercher l'adresse sur la carte",
+                  ),
               ],
             ),
             const SizedBox(height: 12),
@@ -1224,6 +1237,39 @@ class _ClientCard extends StatelessWidget {
                 ],
               ),
             ],
+
+            // Repères du client.
+            //
+            // Ils n'apparaissaient que dans le panneau de la carte de suivi,
+            // c'est-à-dire uniquement en EN_TRANSIT. Or « portail bleu face à
+            // la pharmacie » est ce qui permet au livreur de juger le trajet
+            // **avant** d'accepter la course, et c'est souvent la seule
+            // information qui situe réellement une porte à Brazzaville.
+            if (order.clientLandmark != null &&
+                order.clientLandmark!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    size: 18,
+                    color: AppColors.textMed,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      order.clientLandmark!,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontStyle: FontStyle.italic,
+                        color: AppColors.textMed,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -1427,7 +1473,11 @@ class _DestinationPanel extends StatelessWidget {
     final landmark = order!.clientLandmark;
     final hasAddress = address != null && address!.isNotEmpty;
 
-    if (!hasAddress && landmark == null && precision.hasPosition) {
+    // Le guidage part d'un point si on en a un, sinon du texte de l'adresse.
+    // Une destination sans ni l'un ni l'autre n'est pas navigable.
+    final canNavigate = precision.hasPosition || hasAddress;
+
+    if (!hasAddress && landmark == null && !canNavigate) {
       return const SizedBox.shrink();
     }
 
@@ -1513,8 +1563,77 @@ class _DestinationPanel extends StatelessWidget {
               ),
             ),
           ],
+          if (canNavigate) ...[
+            const SizedBox(height: 10),
+            _NavigateButton(
+              latitude: order!.clientLatitude,
+              longitude: order!.clientLongitude,
+              address: address,
+              label: precision.hasPosition
+                  ? 'Naviguer vers la destination'
+                  : "Rechercher l'adresse sur la carte",
+            ),
+          ],
         ],
       ),
     );
   }
+}
+
+/// Bouton d'ouverture du guidage GPS.
+///
+/// La cible est **toujours** une destination de la course — le comptoir du
+/// vendeur ou la porte du client — jamais la position courante du livreur, ni
+/// celle du client au moment où il a commandé. Les coordonnées du client sont
+/// résolues côté serveur depuis l'adresse choisie, puis figées sur la
+/// commande : c'est ce qui garantit qu'on guide vers « où on me livre » et non
+/// vers « où j'étais en payant ».
+class _NavigateButton extends StatelessWidget {
+  const _NavigateButton({
+    required this.latitude,
+    required this.longitude,
+    required this.address,
+    required this.label,
+  });
+
+  final double? latitude;
+  final double? longitude;
+  final String? address;
+  final String label;
+
+  Future<void> _open(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final opened = await MapLauncher.openNavigation(
+      latitude: latitude,
+      longitude: longitude,
+      address: address,
+    );
+    if (opened) return;
+    // Un tap sans effet ferait passer une absence d'application de guidage
+    // pour une panne de Lilia Food.
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text(
+          "Aucune application de navigation n'a pu être ouverte. "
+          'Installez Google Maps, ou appelez votre contact.',
+        ),
+        duration: Duration(seconds: 5),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
+    child: OutlinedButton.icon(
+      onPressed: () => _open(context),
+      icon: const Icon(Icons.directions, size: 18),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.primary,
+        side: const BorderSide(color: AppColors.primary),
+        minimumSize: const Size.fromHeight(44),
+      ),
+    ),
+  );
 }

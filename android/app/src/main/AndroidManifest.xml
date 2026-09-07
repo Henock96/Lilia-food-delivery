@@ -79,5 +79,40 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+
+        <!-- Android 11+ (API 30) filtre ce qu'une application peut « voir » des
+             autres. Sans ces déclarations, `canLaunchUrl` renvoie false et les
+             appels ci-dessous échouent SANS erreur : le bouton paraît
+             simplement mort. C'était le cas des boutons « Appeler » et « SMS »
+             de l'écran de course — un livreur qui ne trouvait pas la porte ne
+             pouvait pas joindre le client. -->
+
+        <!-- ⚠️ L'action doit être VIEW, et pas DIAL / SENDTO : `url_launcher`
+             construit un `Intent(Intent.ACTION_VIEW)` aussi bien pour
+             `canLaunchUrl` que pour `launchUrl` (url_launcher_android,
+             UrlLauncher.java). Une déclaration DIAL ne débloque donc rien —
+             elle a l'air correcte et ne change pas le comportement. -->
+
+        <!-- Guidage GPS : geo: et google.navigation: -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="geo"/>
+        </intent>
+        <!-- Repli web de l'itinéraire -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <!-- Appeler le client ou le vendeur -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="tel"/>
+        </intent>
+        <!-- Envoyer un SMS au client -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="sms"/>
+        </intent>
+        <package android:name="com.google.android.apps.maps"/>
     </queries>
 </manifest>

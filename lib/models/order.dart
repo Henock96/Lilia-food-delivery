@@ -10,13 +10,24 @@ class DeliveryRestaurant {
   final String? phone;
   final VendorType vendorType;
 
+  /// Position du point de retrait. Le livreur fait deux trajets par course —
+  /// vers le comptoir, puis vers le client — et seul le second était guidable.
+  /// `null` si le vendeur n'a pas renseigné sa position à l'onboarding.
+  final double? latitude;
+  final double? longitude;
+
   const DeliveryRestaurant({
     this.id,
     required this.nom,
     this.adresse,
     this.phone,
     this.vendorType = VendorType.RESTAURANT,
+    this.latitude,
+    this.longitude,
   });
+
+  /// `true` si un itinéraire peut viser un point plutôt qu'un texte.
+  bool get hasPosition => latitude != null && longitude != null;
 
   factory DeliveryRestaurant.fromJson(Map<String, dynamic> json) =>
       DeliveryRestaurant(
@@ -25,6 +36,8 @@ class DeliveryRestaurant {
         adresse: _nullableString(json['adresse']),
         phone: _nullableString(json['phone']),
         vendorType: VendorType.fromString(json['vendorType'] as String?),
+        latitude: _doubleValue(json['latitude']),
+        longitude: _doubleValue(json['longitude']),
       );
 }
 

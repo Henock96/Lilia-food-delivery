@@ -94,5 +94,17 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- Équivalent iOS des <queries> Android : sans cette liste,
+	     `canLaunchUrl` renvoie false pour ces schémas et le bouton
+	     « Naviguer » retombe silencieusement sur le navigateur, même quand
+	     Google Maps est installé. `maps:` (Apple Plans) n'a pas besoin d'être
+	     déclaré, mais l'y laisser ne coûte rien et rend la liste lisible. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>comgooglemaps</string>
+		<string>maps</string>
+		<string>tel</string>
+		<string>sms</string>
+	</array>
 </dict>
 </plist>
