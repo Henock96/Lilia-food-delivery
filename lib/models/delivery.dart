@@ -59,6 +59,25 @@ class Delivery {
   final double? lastLatitude;
   final double? lastLongitude;
 
+  // ─── Ce que CETTE course rapporte au livreur ──────────────────────────────
+
+  /// Rémunération due pour cette course, en XAF. Figée à l'acceptation : un
+  /// changement de taux ne modifie pas une course déjà acceptée.
+  ///
+  /// ⚠️ `null` = **inconnu**, et l'écran doit l'afficher comme tel. Les courses
+  /// antérieures au 18/09/2026 n'ont aucune économie — aucun backfill n'a été
+  /// fait, parce qu'inventer des montants jamais versés serait pire que
+  /// l'absence. Afficher « 0 XAF » dirait au livreur qu'il n'a rien gagné.
+  final int? driverPayXaf;
+
+  /// Modèle appliqué (`SALARY`, `PER_DELIVERY`, `SALARY_PLUS_PER_DELIVERY`).
+  /// Rend un montant de 0 lisible : au salaire, zéro par course est la bonne
+  /// réponse, et l'écran doit l'expliquer au lieu d'afficher un zéro sec.
+  final String? driverCompensationModel;
+
+  /// Part du livreur, en pourcentage, telle qu'appliquée à cette course.
+  final double? driverSharePercent;
+
   const Delivery({
     required this.id,
     required this.orderId,
@@ -71,6 +90,9 @@ class Delivery {
     this.deliveredAt,
     this.lastLatitude,
     this.lastLongitude,
+    this.driverPayXaf,
+    this.driverCompensationModel,
+    this.driverSharePercent,
   });
 
   factory Delivery.fromJson(Map<String, dynamic> json) {
@@ -91,6 +113,17 @@ class Delivery {
       deliveredAt: _dateValue(json['deliveredAt']),
       lastLatitude: _doubleValue(json['lastLatitude']),
       lastLongitude: _doubleValue(json['lastLongitude']),
+      // `driverEconomicsFrozenAt` est le discriminant, pas le montant : une
+      // course gelée à 0 (livreur au salaire) et une course sans économie
+      // rendraient toutes deux `0` si on lisait `driverPayXaf` seul. Ce sont
+      // deux situations très différentes pour celui qui est payé.
+      driverPayXaf: json['driverEconomicsFrozenAt'] != null
+          ? _intValue(json['driverPayXaf'])
+          : null,
+      driverCompensationModel: _nullableString(
+        json['driverCompensationModel'],
+      ),
+      driverSharePercent: _doubleValue(json['driverSharePercent']),
     );
   }
 }
@@ -99,6 +132,11 @@ String _stringValue(Object? value, [String fallback = '']) =>
     value is String ? value : fallback;
 
 double? _doubleValue(Object? value) => value is num ? value.toDouble() : null;
+
+int? _intValue(Object? value) => value is num ? value.toInt() : null;
+
+String? _nullableString(Object? value) =>
+    value is String && value.isNotEmpty ? value : null;
 
 DateTime? _dateValue(Object? value) {
   if (value is! String || value.isEmpty) return null;

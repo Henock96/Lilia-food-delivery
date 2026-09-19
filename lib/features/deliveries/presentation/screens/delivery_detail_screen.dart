@@ -185,10 +185,20 @@ class _DeliveryDetailBody extends ConsumerWidget {
             const SizedBox(height: 12),
           ],
 
-          // Pricing
+          // ─── Ce que le LIVREUR touche ────────────────────────────────────
+          //
+          // Cette carte vient AVANT celle du montant client, et c'est
+          // délibéré : l'écran n'affichait que le total de la commande, soit
+          // ~6 750 XAF sur un panier type. Aucun de ces francs n'est le sien —
+          // le gros va au vendeur. Lu sur son propre écran de mission, ce
+          // chiffre se comprend comme sa rémunération.
+          _DriverPayCard(delivery: delivery),
+          const SizedBox(height: 12),
+
+          // Montant de la commande — l'argent du client, pas celui du livreur.
           if (order != null) ...[
             _InfoCard(
-              title: 'Montant',
+              title: 'Montant de la commande',
               icon: Icons.payments_outlined,
               children: [
                 _InfoRow(label: 'Sous-total', value: '${order.subTotal} XAF'),
@@ -197,7 +207,7 @@ class _DeliveryDetailBody extends ConsumerWidget {
                   value: '${order.deliveryFee} XAF',
                 ),
                 _InfoRow(
-                  label: 'Total',
+                  label: 'Payé par le client',
                   value: '${order.total} XAF',
                   bold: true,
                 ),
@@ -1636,4 +1646,69 @@ class _NavigateButton extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// Ce que le livreur touche pour CETTE course.
+///
+/// ## Pourquoi ce widget existe
+///
+/// L'application ne montrait au livreur que le total de la commande. Sur un
+/// panier type, il lisait « 6 750 XAF » — dont 5 000 pour le vendeur et 750 de
+/// frais de service. Aucun écran ne disait ce qu'il gagnait, parce que le
+/// système ne le savait pas.
+///
+/// ## Les trois états, et pourquoi ils sont distincts
+///
+/// · **montant connu** → on l'affiche, avec son taux ;
+/// · **au salaire** → 0 par course est la bonne réponse, mais un « 0 XAF » sec
+///   se lirait comme une erreur : on l'explique ;
+/// · **inconnu** (`null`) → tiret et explication. ⚠️ Jamais `0` : les courses
+///   antérieures au 18/09/2026 n'ont aucune économie, et afficher zéro dirait
+///   au livreur qu'il n'a rien gagné.
+class _DriverPayCard extends StatelessWidget {
+  const _DriverPayCard({required this.delivery});
+
+  final Delivery delivery;
+
+  @override
+  Widget build(BuildContext context) {
+    final pay = delivery.driverPayXaf;
+    final salaried = delivery.driverCompensationModel == 'SALARY';
+    final share = delivery.driverSharePercent;
+
+    final String value;
+    final String? note;
+    if (pay == null) {
+      value = '—';
+      note = 'Rémunération non enregistrée pour cette course.';
+    } else if (salaried) {
+      value = '0 XAF';
+      note = 'Vous êtes rémunéré au salaire, pas à la course.';
+    } else {
+      value = '$pay XAF';
+      note = share != null
+          ? 'Votre part : ${share.toStringAsFixed(share % 1 == 0 ? 0 : 2)} % '
+                'des frais de livraison.'
+          : null;
+    }
+
+    return _InfoCard(
+      title: 'Votre rémunération',
+      icon: Icons.account_balance_wallet_outlined,
+      children: [
+        _InfoRow(label: 'Pour cette course', value: value, bold: true),
+        if (note != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              note,
+              style: TextStyle(
+                fontSize: 12,
+                color: pay == null ? Colors.orange.shade800 : Colors.grey,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }
