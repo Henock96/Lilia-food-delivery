@@ -4,6 +4,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../models/delivery.dart';
 import '../../../models/app_user.dart';
+import '../../../models/driver_earnings.dart';
 
 part 'delivery_repository.g.dart';
 
@@ -54,6 +55,27 @@ class DeliveryRepository {
       }
     }
     return AppUser.fromJson(payload);
+  }
+
+  /// GET /drivers/me/earnings/outstanding — ce qui me reste dû.
+  ///
+  /// ⚠️ Lecture pure côté serveur : la consulter ne verrouille aucune course
+  /// et ne déclenche aucun versement.
+  Future<DriverOutstanding> getOutstanding() async {
+    final res = await _api.getJson('/drivers/me/earnings/outstanding');
+    final json = _asObject(res.data);
+    final payload = json['data'] is Map<String, dynamic>
+        ? json['data'] as Map<String, dynamic>
+        : json;
+    return DriverOutstanding.fromJson(payload);
+  }
+
+  /// GET /drivers/me/earnings — mes versements déjà reçus.
+  Future<List<DriverSettlement>> getSettlements() async {
+    final res = await _api.getJson('/drivers/me/earnings');
+    return _asList(res.data)
+        .map((e) => DriverSettlement.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   /// GET /deliveries/mine — livraisons assignées au livreur connecté
@@ -207,3 +229,16 @@ class DeliveryRepository {
 @Riverpod(keepAlive: true)
 DeliveryRepository deliveryRepository(Ref ref) =>
     DeliveryRepository(ref.watch(apiClientProvider));
+
+/// Ce qui reste dû au livreur connecté.
+///
+/// ⚠️ Lecture pure : la consulter ne verrouille aucune course et ne déclenche
+/// aucun versement. Elle peut donc être rafraîchie librement.
+@riverpod
+Future<DriverOutstanding> myOutstanding(Ref ref) =>
+    ref.watch(deliveryRepositoryProvider).getOutstanding();
+
+/// Les versements déjà reçus par le livreur connecté.
+@riverpod
+Future<List<DriverSettlement>> mySettlements(Ref ref) =>
+    ref.watch(deliveryRepositoryProvider).getSettlements();

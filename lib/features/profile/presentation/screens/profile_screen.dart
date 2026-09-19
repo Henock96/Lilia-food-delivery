@@ -6,6 +6,7 @@ import '../../../../utilities/app_theme.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../application/profile_controller.dart';
 import '../../data/ratings_repository.dart';
+import 'my_earnings_screen.dart';
 import 'my_ratings_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -70,6 +71,32 @@ class _ProfileBody extends ConsumerWidget {
           // 29/08, mais il ne pouvait pas voir sa note — une notation que le
           // noté ignore n'a aucun effet sur la qualité de service.
           _RatingSummaryTile(delivererId: user.id),
+          const SizedBox(height: 12),
+
+          // Accès à la rémunération. Placé sur le profil et non dans les
+          // missions : c'est une information sur LUI, pas sur une course.
+          Card(
+            child: ListTile(
+              leading: const Icon(
+                Icons.account_balance_wallet_outlined,
+                color: AppColors.primary,
+              ),
+              title: const Text(
+                'Mes gains',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: const Text(
+                'Ce qui vous reste dû et vos versements',
+                style: TextStyle(fontSize: 12),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const MyEarningsScreen(),
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 24),
 
           // Driver status toggle
