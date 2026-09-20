@@ -9,6 +9,14 @@ class AuthRepository {
 
   Stream<User?> authStateChanges() => _auth.authStateChanges();
 
+  /// Émet à chaque renouvellement du jeton d'identité Firebase (~1 h).
+  ///
+  /// Distinct d'`authStateChanges`, qui ne parle que de connexion et
+  /// déconnexion : un jeton renouvelé n'est pas un changement de session, et
+  /// c'est pourtant l'événement dont le socket de tracking a besoin pour ne
+  /// pas rejouer indéfiniment un jeton périmé.
+  Stream<User?> idTokenChanges() => _auth.idTokenChanges();
+
   Future<String?> getIdToken() async {
     final user = _auth.currentUser;
     if (user == null) return null;
@@ -31,3 +39,10 @@ AuthRepository authRepository(Ref ref) => AuthRepository(FirebaseAuth.instance);
 @Riverpod(keepAlive: true)
 Stream<User?> authStateChange(Ref ref) =>
     ref.watch(authRepositoryProvider).authStateChanges();
+
+/// Jeton d'identité courant, réémis à chaque renouvellement Firebase.
+@Riverpod(keepAlive: true)
+Stream<String?> firebaseIdToken(Ref ref) => ref
+    .watch(authRepositoryProvider)
+    .idTokenChanges()
+    .asyncMap((user) => user?.getIdToken());

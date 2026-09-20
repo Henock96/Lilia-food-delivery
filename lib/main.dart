@@ -4,37 +4,25 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:sentry_flutter/sentry_flutter.dart';
+import 'common_widgets/app_cached_image.dart';
 import 'features/deliveries/application/connectivity_watcher.dart';
 import 'features/deliveries/application/tracking_resume_service.dart';
 import 'routing/app_router.dart';
 import 'services/notification_service.dart';
+import 'features/deliveries/presentation/widgets/tracking_issue_banner.dart';
 import 'utilities/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Cache mémoire images plafonné à 100 MB (LIL-37).
+  LiliaImageCache.configureMemoryCache();
 
   // DSN injecté au build via --dart-define=SENTRY_DSN=... (jamais en dur).
   // DSN vide => Sentry se désactive tout seul, l'appRunner s'exécute quand même.
-  await SentryFlutter.init(
-    (options) {
-      options.dsn = const String.fromEnvironment('SENTRY_DSN');
-      options.environment = const String.fromEnvironment(
-        'SENTRY_ENV',
-        defaultValue: 'production',
-      );
-      options.tracesSampleRate = 0.1;
-      // Profiling Sentry Flutter encore en bêta — API stable en pratique.
-      // ignore: experimental_member_use
-      options.profilesSampleRate = 0.1;
-    },
-    appRunner: () async {
-      await Firebase.initializeApp();
-      await initializeDateFormatting('fr_FR', null);
-      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-      runApp(const ProviderScope(child: LiliaDeliveryApp()));
-    },
-  );
+  await Firebase.initializeApp();
+  await initializeDateFormatting('fr_FR', null);
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  runApp(const ProviderScope(child: LiliaDeliveryApp()));
 }
 
 class LiliaDeliveryApp extends ConsumerStatefulWidget {
@@ -52,20 +40,11 @@ class _LiliaDeliveryAppState extends ConsumerState<LiliaDeliveryApp> {
     FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null) {
         // Associe les erreurs Sentry au livreur connecté (rôle constant LIVREUR).
-        Sentry.configureScope(
-          (scope) => scope.setUser(
-            SentryUser(
-              id: user.uid,
-              email: user.email,
-              data: const {'role': 'LIVREUR'},
-            ),
-          ),
-        );
+       
         ref.read(deliveryNotificationServiceProvider).init();
         ref.read(trackingResumeServiceProvider).start();
         ref.read(connectivityWatcherProvider).start();
       } else {
-        Sentry.configureScope((scope) => scope.setUser(null));
         ref.read(deliveryNotificationServiceProvider).removeToken();
         ref.read(trackingResumeServiceProvider).stop();
         ref.read(connectivityWatcherProvider).stop();
@@ -82,6 +61,12 @@ class _LiliaDeliveryAppState extends ConsumerState<LiliaDeliveryApp> {
       theme: AppTheme.theme,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
+      // Le bandeau « le client ne vous voit pas » vit au-dessus du routeur, et
+      // non dans le shell : le livreur passe sa course sur l'écran de détail,
+      // poussé par-dessus les onglets. Un bandeau logé dans le shell serait
+      // invisible exactement pendant les minutes où l'information compte.
+      builder: (context, child) =>
+          TrackingIssueBanner(child: child ?? const SizedBox.shrink()),
     );
   }
 }

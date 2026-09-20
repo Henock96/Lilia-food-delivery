@@ -17,6 +17,7 @@ class DeliveryCard extends StatelessWidget {
 
   Color _statusColor() => switch (delivery.status) {
     DeliveryStatus.assigner => AppColors.warning,
+    DeliveryStatus.accepter => AppColors.warning,
     DeliveryStatus.en_transit => AppColors.primary,
     DeliveryStatus.livrer => AppColors.success,
     DeliveryStatus.echec => AppColors.error,
@@ -174,12 +175,39 @@ class DeliveryCard extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    Text(
-                      '${order.total} XAF',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textDark,
-                      ),
+                    // ⚠️ Deux montants, et ils ne sont pas interchangeables.
+                    //
+                    // `order.total` est ce que le CLIENT paie — le gros va au
+                    // vendeur. Il était seul affiché ici, en gras, sur la carte
+                    // de mission du livreur : lu ainsi, il se comprend comme sa
+                    // rémunération alors qu'il en est ~20 fois le montant.
+                    //
+                    // La rémunération passe donc en avant (gras, couleur
+                    // primaire) et le total client derrière, explicitement
+                    // libellé. Quand l'économie de la course est inconnue
+                    // (courses antérieures au 18/09/2026), on n'affiche rien
+                    // plutôt qu'un zéro.
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (delivery.driverPayXaf != null)
+                          Text(
+                            delivery.driverCompensationModel == 'SALARY'
+                                ? 'Au salaire'
+                                : 'Vous : ${delivery.driverPayXaf} XAF',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        Text(
+                          'Client : ${order.total} XAF',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textMed,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

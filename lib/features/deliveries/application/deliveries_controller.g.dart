@@ -37,7 +37,7 @@ final class MissionsControllerProvider
 }
 
 String _$missionsControllerHash() =>
-    r'3bf253a9642ef1398e25cb8c593da6bd23d738af';
+    r'a800da2f7cd5979518aab74c58b53c2c5e42245c';
 
 /// Liste de mes missions actives (ASSIGNER + EN_TRANSIT)
 
@@ -45,7 +45,7 @@ abstract class _$MissionsController extends $AsyncNotifier<List<Delivery>> {
   FutureOr<List<Delivery>> build();
   @$mustCallSuper
   @override
-  void runBuild() {
+  WhenComplete runBuild() {
     final ref = this.ref as $Ref<AsyncValue<List<Delivery>>, List<Delivery>>;
     final element =
         ref.element
@@ -55,7 +55,7 @@ abstract class _$MissionsController extends $AsyncNotifier<List<Delivery>> {
               Object?,
               Object?
             >;
-    element.handleCreate(ref, build);
+    return element.handleCreate(ref, build);
   }
 }
 
@@ -99,7 +99,7 @@ abstract class _$DeliveriesHistoryController
   FutureOr<List<Delivery>> build();
   @$mustCallSuper
   @override
-  void runBuild() {
+  WhenComplete runBuild() {
     final ref = this.ref as $Ref<AsyncValue<List<Delivery>>, List<Delivery>>;
     final element =
         ref.element
@@ -109,7 +109,7 @@ abstract class _$DeliveriesHistoryController
               Object?,
               Object?
             >;
-    element.handleCreate(ref, build);
+    return element.handleCreate(ref, build);
   }
 }
 
@@ -160,7 +160,7 @@ final class DeliveryDetailControllerProvider
 }
 
 String _$deliveryDetailControllerHash() =>
-    r'e6cc1bfce4cdd9649eb8947d95c62a9ffd27198a';
+    r'47ece21f2f6846b2f743c8031cd50a8dc4976ac1';
 
 /// Détail d'une livraison spécifique
 
@@ -200,7 +200,7 @@ abstract class _$DeliveryDetailController extends $AsyncNotifier<Delivery> {
   FutureOr<Delivery> build(String deliveryId);
   @$mustCallSuper
   @override
-  void runBuild() {
+  WhenComplete runBuild() {
     final ref = this.ref as $Ref<AsyncValue<Delivery>, Delivery>;
     final element =
         ref.element
@@ -210,6 +210,6 @@ abstract class _$DeliveryDetailController extends $AsyncNotifier<Delivery> {
               Object?,
               Object?
             >;
-    element.handleCreate(ref, () => build(_$args));
+    return element.handleCreate(ref, () => build(_$args));
   }
 }

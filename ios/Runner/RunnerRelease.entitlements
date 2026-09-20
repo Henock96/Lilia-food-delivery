@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Config Release. Reste sur `development` tant que les builds sont signés
+	     avec un profil de développement (aligné sur lilia-app). À basculer sur
+	     `production` au moment de la première distribution App Store /
+	     TestFlight, sinon APNS rejette les tokens du sandbox. -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

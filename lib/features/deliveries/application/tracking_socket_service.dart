@@ -106,6 +106,24 @@ class TrackingSocketService {
 TrackingSocketService trackingSocketService(Ref ref) {
   final auth = ref.watch(authRepositoryProvider);
   final service = TrackingSocketService(auth);
+
+  // Le token Firebase est capturé **une seule fois**, à l'ouverture du socket,
+  // et Socket.io rejoue ce même token à chaque reconnexion automatique. Au
+  // bout d'une heure il expire : la gateway déconnecte à chaque émission, la
+  // reconnexion repasse le token périmé, et le suivi WebSocket tombe en
+  // boucle. Le repli HTTP prenait le relais — donc la panne était invisible,
+  // au prix d'une requête toutes les 5 s.
+  //
+  // Le correctif existait côté app cliente depuis l'audit d'août (C3) mais
+  // n'avait pas été porté ici. On reconnecte dès que Firebase renouvelle le
+  // token, et seulement si une course est en cours.
+  ref.listen(firebaseIdTokenProvider, (previous, next) {
+    final token = next.value;
+    if (token != null && service.isConnected) {
+      unawaited(service.reconnect());
+    }
+  });
+
   ref.onDispose(() => service.disconnect());
   return service;
 }

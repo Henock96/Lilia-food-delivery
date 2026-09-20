@@ -21,6 +21,32 @@ val googleMapsApiKey: String =
     localProperties.getProperty("googleMapsApiKey")
         ?: providers.environmentVariable("GOOGLE_MAPS_API_KEY").orNull
         ?: "YOUR_GOOGLE_MAPS_API_KEY"
+
+// Refuse de produire un binaire de release sans vraie clé Maps.
+//
+// Le repli sur le gabarit était silencieux : `flutter build appbundle` sans
+// `local.properties` produisait un APK qui compile, s'installe, se lance — et
+// affiche une **carte grise** sans le moindre message. C'est exactement le
+// « ça marche en debug, pas en release » qu'on cherchait à expliquer.
+//
+// En debug on tolère l'absence (un développeur qui ne touche pas aux cartes
+// n'a pas à réclamer une clé) ; en release on casse le build, avec la marche
+// à suivre.
+gradle.taskGraph.whenReady {
+    val buildingRelease = allTasks.any { task ->
+        task.name.contains("Release") &&
+            (task.name.startsWith("assemble") || task.name.startsWith("bundle"))
+    }
+    if (buildingRelease && googleMapsApiKey == "YOUR_GOOGLE_MAPS_API_KEY") {
+        throw GradleException(
+            "Clé Google Maps absente : ajoutez `googleMapsApiKey=<clé>` dans " +
+                "android/local.properties (fichier gitignoré), ou exportez " +
+                "GOOGLE_MAPS_API_KEY. Sans elle, le binaire de release affiche une carte grise " +
+                "sans aucune erreur."
+        )
+    }
+}
+
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {

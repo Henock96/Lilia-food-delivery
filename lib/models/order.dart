@@ -1,4 +1,6 @@
 import 'package:intl/intl.dart';
+
+import 'location_precision.dart';
 import 'package:lilia_food_delivery/models/vendor_type.dart';
 
 class DeliveryRestaurant {
@@ -8,13 +10,24 @@ class DeliveryRestaurant {
   final String? phone;
   final VendorType vendorType;
 
+  /// Position du point de retrait. Le livreur fait deux trajets par course —
+  /// vers le comptoir, puis vers le client — et seul le second était guidable.
+  /// `null` si le vendeur n'a pas renseigné sa position à l'onboarding.
+  final double? latitude;
+  final double? longitude;
+
   const DeliveryRestaurant({
     this.id,
     required this.nom,
     this.adresse,
     this.phone,
     this.vendorType = VendorType.RESTAURANT,
+    this.latitude,
+    this.longitude,
   });
+
+  /// `true` si un itinéraire peut viser un point plutôt qu'un texte.
+  bool get hasPosition => latitude != null && longitude != null;
 
   factory DeliveryRestaurant.fromJson(Map<String, dynamic> json) =>
       DeliveryRestaurant(
@@ -23,6 +36,8 @@ class DeliveryRestaurant {
         adresse: _nullableString(json['adresse']),
         phone: _nullableString(json['phone']),
         vendorType: VendorType.fromString(json['vendorType'] as String?),
+        latitude: _doubleValue(json['latitude']),
+        longitude: _doubleValue(json['longitude']),
       );
 }
 
@@ -76,8 +91,20 @@ class DeliveryOrder {
   final DeliveryRestaurant? restaurant;
   final List<OrderItem> items;
   final DeliveryAddress? adresse;
+  /// Destination de la course, résolue par le serveur depuis l'adresse du
+  /// client — ce n'est **plus** la position de son téléphone au moment de
+  /// commander.
   final double? clientLatitude;
   final double? clientLongitude;
+
+  /// Fiabilité de cette destination. Décide de ce que le livreur doit faire
+  /// en arrivant : viser le point, ou appeler.
+  final LocationPrecision clientLocationPrecision;
+
+  /// Repères saisis par le client : « portail bleu face à la pharmacie ». À
+  /// Brazzaville, souvent la seule information qui situe réellement une porte.
+  final String? clientLandmark;
+
   final String? clientNom;
   final String? clientPhone;
   final String? contactPhone;
@@ -94,6 +121,8 @@ class DeliveryOrder {
     this.adresse,
     this.clientLatitude,
     this.clientLongitude,
+    this.clientLocationPrecision = LocationPrecision.unknown,
+    this.clientLandmark,
     this.clientNom,
     this.clientPhone,
     this.contactPhone,
@@ -155,6 +184,10 @@ class DeliveryOrder {
       adresse: adresse,
       clientLatitude: _doubleValue(json['deliveryLatitude']),
       clientLongitude: _doubleValue(json['deliveryLongitude']),
+      clientLocationPrecision: LocationPrecision.fromWire(
+        _nullableString(json['deliveryPrecision']),
+      ),
+      clientLandmark: _nullableString(json['deliveryLandmark']),
       clientNom: _nullableString(user?['nom']),
       clientPhone: _nullableString(user?['phone']),
       contactPhone: _nullableString(json['contactPhone']),

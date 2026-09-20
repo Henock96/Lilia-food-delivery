@@ -55,4 +55,4 @@ final class TrackingSocketServiceProvider
 }
 
 String _$trackingSocketServiceHash() =>
-    r'102ab5009ee3f2803ff3cd9b9938eac9906c2f91';
+    r'35e0f0b5ad4696d0a6d55e4b336b5d6e82bc01d2';

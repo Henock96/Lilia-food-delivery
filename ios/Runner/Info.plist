@@ -28,6 +28,10 @@
 	<string>$(GOOGLE_MAPS_API_KEY)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Lilia Food a besoin de votre position pour continuer le suivi de livraison en arrière-plan.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Lilia Food a besoin de votre position pour suivre votre livraison en temps réel.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -51,10 +55,28 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Lilia Food a besoin de votre position pour suivre votre livraison en temps réel.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Lilia Food a besoin de votre position pour continuer le suivi de livraison en arrière-plan.</string>
+	<!-- `remote-notification` autorise iOS à réveiller l'app pour exécuter
+	     `firebaseMessagingBackgroundHandler` sur les messages FCM reçus en
+	     arrière-plan. Sans lui, seuls les pushs affichés par le système
+	     arrivent et le handler Dart n'est jamais appelé.
+	     NB : le mode `location` (tracking GPS app fermée) reste à ajouter
+	     séparément — cf. la TODO « tracking arrière-plan complet ». -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+		<!-- Suivi pendant une course, écran verrouillé.
+
+		     Sans ce mode, iOS suspend l'app dès qu'elle quitte le premier plan
+		     et aucune position ne part : le livreur roulait, le client voyait
+		     un marqueur figé. Le mode est activé au démarrage d'une course
+		     (`allowBackgroundLocationUpdates`) et coupé à son terme — il n'est
+		     pas permanent.
+
+		     `NSLocationAlwaysAndWhenInUseUsageDescription` était déjà déclarée
+		     mais restait inopérante sans ce mode : la permission « Toujours »
+		     ne sert à rien à une app qu'iOS met en veille. -->
+		<string>location</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -71,6 +93,18 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<!-- Équivalent iOS des <queries> Android : sans cette liste,
+	     `canLaunchUrl` renvoie false pour ces schémas et le bouton
+	     « Naviguer » retombe silencieusement sur le navigateur, même quand
+	     Google Maps est installé. `maps:` (Apple Plans) n'a pas besoin d'être
+	     déclaré, mais l'y laisser ne coûte rien et rend la liste lisible. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>comgooglemaps</string>
+		<string>maps</string>
+		<string>tel</string>
+		<string>sms</string>
 	</array>
 </dict>
 </plist>

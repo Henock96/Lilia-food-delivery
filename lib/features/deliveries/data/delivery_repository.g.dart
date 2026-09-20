@@ -9,47 +9,6 @@ part of 'delivery_repository.dart';
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
 
-@ProviderFor(httpClient)
-final httpClientProvider = HttpClientProvider._();
-
-final class HttpClientProvider
-    extends $FunctionalProvider<http.Client, http.Client, http.Client>
-    with $Provider<http.Client> {
-  HttpClientProvider._()
-    : super(
-        from: null,
-        argument: null,
-        retry: null,
-        name: r'httpClientProvider',
-        isAutoDispose: false,
-        dependencies: null,
-        $allTransitiveDependencies: null,
-      );
-
-  @override
-  String debugGetCreateSourceHash() => _$httpClientHash();
-
-  @$internal
-  @override
-  $ProviderElement<http.Client> $createElement($ProviderPointer pointer) =>
-      $ProviderElement(pointer);
-
-  @override
-  http.Client create(Ref ref) {
-    return httpClient(ref);
-  }
-
-  /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(http.Client value) {
-    return $ProviderOverride(
-      origin: this,
-      providerOverride: $SyncValueProvider<http.Client>(value),
-    );
-  }
-}
-
-String _$httpClientHash() => r'1bf6eabbdd814851d2512b83b0f42d9f74d55940';
-
 @ProviderFor(deliveryRepository)
 final deliveryRepositoryProvider = DeliveryRepositoryProvider._();
 
@@ -96,4 +55,105 @@ final class DeliveryRepositoryProvider
 }
 
 String _$deliveryRepositoryHash() =>
-    r'b411a8e852e6c39c84cd5f41e8cecdf743b5eeab';
+    r'8c2f42b435d498a1390c5ce257bce6b0aff7496a';
+
+/// Ce qui reste dû au livreur connecté.
+///
+/// ⚠️ Lecture pure : la consulter ne verrouille aucune course et ne déclenche
+/// aucun versement. Elle peut donc être rafraîchie librement.
+
+@ProviderFor(myOutstanding)
+final myOutstandingProvider = MyOutstandingProvider._();
+
+/// Ce qui reste dû au livreur connecté.
+///
+/// ⚠️ Lecture pure : la consulter ne verrouille aucune course et ne déclenche
+/// aucun versement. Elle peut donc être rafraîchie librement.
+
+final class MyOutstandingProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<DriverOutstanding>,
+          DriverOutstanding,
+          FutureOr<DriverOutstanding>
+        >
+    with
+        $FutureModifier<DriverOutstanding>,
+        $FutureProvider<DriverOutstanding> {
+  /// Ce qui reste dû au livreur connecté.
+  ///
+  /// ⚠️ Lecture pure : la consulter ne verrouille aucune course et ne déclenche
+  /// aucun versement. Elle peut donc être rafraîchie librement.
+  MyOutstandingProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'myOutstandingProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$myOutstandingHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<DriverOutstanding> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<DriverOutstanding> create(Ref ref) {
+    return myOutstanding(ref);
+  }
+}
+
+String _$myOutstandingHash() => r'bd9d91b9c128fe1dc9430bc391fab1ecb9610b64';
+
+/// Les versements déjà reçus par le livreur connecté.
+
+@ProviderFor(mySettlements)
+final mySettlementsProvider = MySettlementsProvider._();
+
+/// Les versements déjà reçus par le livreur connecté.
+
+final class MySettlementsProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<List<DriverSettlement>>,
+          List<DriverSettlement>,
+          FutureOr<List<DriverSettlement>>
+        >
+    with
+        $FutureModifier<List<DriverSettlement>>,
+        $FutureProvider<List<DriverSettlement>> {
+  /// Les versements déjà reçus par le livreur connecté.
+  MySettlementsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'mySettlementsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$mySettlementsHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<List<DriverSettlement>> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<List<DriverSettlement>> create(Ref ref) {
+    return mySettlements(ref);
+  }
+}
+
+String _$mySettlementsHash() => r'5bc4cea81d4baa612dd65520603d143baddccd60';
