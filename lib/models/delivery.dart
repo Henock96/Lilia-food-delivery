@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'order.dart';
 
 /// Cycle de vie d'une course, aligné sur l'enum backend.
@@ -18,14 +20,57 @@ extension DeliveryStatusX on DeliveryStatus {
     DeliveryStatus.echec => 'Échec',
   };
 
-  static DeliveryStatus fromString(String s) => switch (s.toUpperCase()) {
-    'ASSIGNER' => DeliveryStatus.assigner,
-    'ACCEPTER' => DeliveryStatus.accepter,
-    'EN_TRANSIT' => DeliveryStatus.en_transit,
-    'LIVRER' => DeliveryStatus.livrer,
-    'ECHEC' => DeliveryStatus.echec,
-    _ => DeliveryStatus.en_attente,
-  };
+  /// Repli appliqué à une valeur que cette version ne connaît pas.
+  ///
+  /// Exposé pour que le comportement de production — assertions désactivées —
+  /// reste vérifiable en test.
+  static const DeliveryStatus fallbackForUnknown = DeliveryStatus.en_attente;
+
+  /// Parse un `DeliveryStatus` émis par le backend.
+  ///
+  /// ⚠️ Le repli était **silencieux**, et c'est ce silence qui a coûté : quand
+  /// le backend a introduit `ACCEPTER` le 29/08/2026, toute course acceptée
+  /// s'est affichée « En attente » chez le livreur pendant plusieurs jours,
+  /// sans qu'une seule ligne ne le signale — la carte de mission disparaissait
+  /// entre l'acceptation et l'arrivée au restaurant.
+  ///
+  /// `lilia-food-admin` a corrigé le même défaut par un `assert` ; les deux
+  /// applications sont désormais alignées. `assert` n'existe qu'en **debug** :
+  /// en production le repli s'applique toujours et l'écran reste utilisable.
+  /// Bruyant pour celui qui peut corriger, silencieux pour celui qui livre.
+  ///
+  /// Une valeur **absente** n'est pas une dérive de contrat : plusieurs
+  /// réponses ne portent pas de statut (`Delivery.fromJson` sur un payload
+  /// minimal). Seule une valeur non vide et non reconnue est signalée.
+  static DeliveryStatus fromString(String s) {
+    switch (s.toUpperCase()) {
+      case 'EN_ATTENTE':
+        return DeliveryStatus.en_attente;
+      case 'ASSIGNER':
+        return DeliveryStatus.assigner;
+      case 'ACCEPTER':
+        return DeliveryStatus.accepter;
+      case 'EN_TRANSIT':
+        return DeliveryStatus.en_transit;
+      case 'LIVRER':
+        return DeliveryStatus.livrer;
+      case 'ECHEC':
+        return DeliveryStatus.echec;
+      default:
+        assert(
+          s.isEmpty,
+          'DeliveryStatus inconnu reçu du backend : "$s" — '
+          "l'enum de l'app livreur est en retard sur Prisma.",
+        );
+        if (s.isNotEmpty) {
+          developer.log(
+            'DeliveryStatus inconnu : $s',
+            name: 'lilia.delivery.status',
+          );
+        }
+        return fallbackForUnknown;
+    }
+  }
 
   String toApiString() => switch (this) {
     DeliveryStatus.en_attente => 'EN_ATTENTE',

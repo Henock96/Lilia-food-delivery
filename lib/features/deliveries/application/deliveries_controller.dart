@@ -1,5 +1,6 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../models/delivery.dart';
+import '../../../core/network/api_exception.dart';
 import '../data/delivery_repository.dart';
 import 'location_service.dart';
 import 'tracking_issue.dart';
@@ -80,8 +81,35 @@ class DeliveryDetailController extends _$DeliveryDetailController {
       ref.read(missionsControllerProvider.notifier).refresh();
     } catch (e, st) {
       state = AsyncValue.error(e, st);
+      _resyncIfServerMovedOn(e);
       rethrow;
     }
+  }
+
+  /// Relit l'état réel quand le serveur dit que la course a bougé.
+  ///
+  /// ## Le scénario
+  ///
+  /// `RetryInterceptor` rejoue automatiquement les `PATCH` sur 5xx et timeout.
+  /// Si `PATCH /deliveries/:id/accept` **expire après** que le serveur a commis,
+  /// le rejeu tombe sur le verrou optimiste et reçoit « Livraison déjà acceptée
+  /// ou non assignée ». Le backend a raison ; l'écran, lui, restait périmé — le
+  /// livreur voyait une erreur sur une action qui avait réussi, et devait tirer
+  /// pour rafraîchir. Sur la 4G de Brazzaville, ce n'est pas un cas de bord.
+  ///
+  /// ## Pourquoi seulement sur un 4xx
+  ///
+  /// Relire sur **toute** erreur ferait marteler l'API pendant une coupure
+  /// réseau — précisément quand elle est déjà en difficulté, et alors que rien
+  /// n'a changé côté serveur. Un `kind: client` est la seule situation où le
+  /// serveur nous dit que notre vision de l'état est fausse.
+  ///
+  /// Best-effort : la relecture ne doit pas remplacer l'erreur d'origine, que
+  /// l'appelant affiche au livreur.
+  void _resyncIfServerMovedOn(Object error) {
+    if (error is! ApiException || error.kind != ApiErrorKind.client) return;
+    ref.invalidateSelf();
+    ref.read(missionsControllerProvider.notifier).refresh();
   }
 
   /// Refuse la mission : elle redevient assignable pour le vendeur.
@@ -94,6 +122,7 @@ class DeliveryDetailController extends _$DeliveryDetailController {
       ref.read(missionsControllerProvider.notifier).refresh();
     } catch (e, st) {
       state = AsyncValue.error(e, st);
+      _resyncIfServerMovedOn(e);
       rethrow;
     }
   }

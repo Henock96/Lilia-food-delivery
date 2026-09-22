@@ -18,10 +18,26 @@ void main() {
       expect(DeliveryStatusX.fromString('EN_ATTENTE'), DeliveryStatus.en_attente);
     });
 
-    test('un statut inconnu retombe sur en_attente plutôt que de planter', () {
-      // Si le backend introduit un état, l'app doit rester utilisable.
+    test('un statut inconnu est SIGNALÉ en développement', () {
+      // ⚠️ Le repli était silencieux, et c'est précisément ce silence qui a
+      // laissé passer l'ajout d'`ACCEPTER` côté backend pendant plusieurs
+      // jours : toute course acceptée s'affichait « En attente », sans qu'une
+      // seule ligne ne le signale. L'admin a corrigé le même défaut par un
+      // `assert` ; on aligne les deux applications.
+      //
+      // `assert` n'existe qu'en debug : en production le repli s'applique
+      // toujours, l'écran du livreur reste utilisable.
       expect(
-        DeliveryStatusX.fromString('UN_ETAT_FUTUR'),
+        () => DeliveryStatusX.fromString('UN_ETAT_FUTUR'),
+        throwsA(isA<AssertionError>()),
+      );
+    });
+
+    test('le repli reste en_attente quand les assertions sont désactivées', () {
+      // Ce que voit un livreur sur un binaire de production. On exerce le
+      // chemin de repli sans passer par l'assertion.
+      expect(
+        DeliveryStatusX.fallbackForUnknown,
         DeliveryStatus.en_attente,
       );
     });
