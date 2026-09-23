@@ -1,3 +1,4 @@
+import '../widgets/handover_code_dialog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -362,10 +363,29 @@ class _DeliveryDetailBody extends ConsumerWidget {
           if (delivery.status == DeliveryStatus.en_transit) ...[
             ElevatedButton.icon(
               onPressed: () async {
-                await ref
-                    .read(deliveryDetailControllerProvider(deliveryId).notifier)
-                    .markDelivered();
-                if (context.mounted) context.pop();
+                // F-06 : « Livré » se prouve par le code que le client lit
+                // dans son application.
+                final code = await showHandoverCodeDialog(context);
+                if (code == null || !context.mounted) return;
+                try {
+                  await ref
+                      .read(deliveryDetailControllerProvider(deliveryId).notifier)
+                      .markDelivered(handoverCode: code);
+                  if (context.mounted) context.pop();
+                } catch (e) {
+                  // Code erroné, trop d'essais, réseau : la course reste
+                  // ouverte et le livreur sait pourquoi. (Avant, l'écran se
+                  // refermait sur un échec comme sur un succès.)
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('$e'),
+                        backgroundColor: AppColors.error,
+                        duration: const Duration(seconds: 6),
+                      ),
+                    );
+                  }
+                }
               },
               icon: const Icon(Icons.check_circle),
               label: const Text('Marquer comme livrée'),

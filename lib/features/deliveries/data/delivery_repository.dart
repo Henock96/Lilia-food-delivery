@@ -137,10 +137,18 @@ class DeliveryRepository {
   }
 
   /// PATCH /deliveries/:id/status — mettre à jour le statut (ex: LIVRER ou ECHEC)
-  Future<Delivery> updateStatus(String id, DeliveryStatus status) async {
+  ///
+  /// [handoverCode] : code de remise à 4 chiffres dicté par le client, qui
+  /// atteste la livraison (Master Audit v1, F-06). Le serveur le vérifie dès
+  /// qu'il est fourni, et finira par l'exiger.
+  Future<Delivery> updateStatus(
+    String id,
+    DeliveryStatus status, {
+    String? handoverCode,
+  }) async {
     final res = await _api.patchJson(
       '/deliveries/$id/status',
-      body: {'status': status.toApiString()},
+      body: {'status': status.toApiString(), 'handoverCode': ?handoverCode},
     );
     return _toDelivery(res.data);
   }
