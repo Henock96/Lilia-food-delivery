@@ -167,13 +167,29 @@ class DeliveryDetailController extends _$DeliveryDetailController {
     }
   }
 
-  Future<void> markDelivered() async {
+  /// Conclut la course avec le code de remise donné par le client (F-06).
+  ///
+  /// ⚠️ Lève en cas d'échec au lieu de l'avaler : un code erroné est
+  /// désormais un cas ordinaire, et l'écran doit le dire au livreur SANS
+  /// quitter la course. Avant, le suivi GPS était coupé et l'écran refermé
+  /// même quand le serveur refusait — la course restait ouverte, invisible.
+  Future<void> markDelivered({required String handoverCode}) async {
+    final previous = state;
     state = const AsyncValue.loading();
-    state = await AsyncValue.guard(
-      () => ref
+    try {
+      final delivery = await ref
           .read(deliveryRepositoryProvider)
-          .updateStatus(deliveryId, DeliveryStatus.livrer),
-    );
+          .updateStatus(
+            deliveryId,
+            DeliveryStatus.livrer,
+            handoverCode: handoverCode,
+          );
+      state = AsyncValue.data(delivery);
+    } catch (_) {
+      // La course est toujours en cours : on rend l'écran tel qu'il était.
+      state = previous;
+      rethrow;
+    }
     ref.read(locationServiceProvider).stopTracking();
     // La course est terminée : une alerte de suivi n'a plus d'objet.
     ref.read(trackingIssueControllerProvider.notifier).clear();
