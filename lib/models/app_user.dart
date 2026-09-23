@@ -1,3 +1,6 @@
+// Noms calqués sur l’enum backend (`ON_DELIVERY`) ; le format réseau passe par
+// `fromString` / `toApiString`, jamais par `.name`.
+// ignore: constant_identifier_names
 enum DriverStatus { available, on_delivery, offline }
 
 extension DriverStatusX on DriverStatus {

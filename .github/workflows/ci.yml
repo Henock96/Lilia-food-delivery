@@ -1,0 +1,53 @@
+name: CI
+
+# Validation bloquante de l'app livreur (L0-7, blueprint Phase 3).
+#
+# Ce dépôt n'avait aucune CI. En l'installant, deux dérives sont apparues sur
+# `master` : `flutter analyze` sortait en erreur (5 infos, fatales par défaut)
+# et `deliveries_controller.g.dart` n'avait pas été régénéré après la saisie du
+# code de remise. Aucune des deux n'aurait été vue avant une release.
+#
+# Même forme que la CI de `lilia-app` : analyse + tests, rien qui exige un
+# secret (Firebase est configuré par `google-services.json`, versionné).
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # Même version que les postes de développement (flutter --version).
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+
+      - name: Dépendances
+        run: flutter pub get
+
+      # Les `.g.dart` sont versionnés : un `@riverpod` modifié sans relancer
+      # build_runner doit casser ici, pas en production.
+      - name: Code généré à jour
+        run: |
+          dart run build_runner build --delete-conflicting-outputs
+          git diff --exit-code -- '*.g.dart'
+
+      # Les infos restent fatales (défaut de `flutter analyze`) : un lint
+      # toléré une fois devient cinquante.
+      - name: Analyse
+        run: flutter analyze
+
+      - name: Tests
+        run: flutter test

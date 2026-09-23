@@ -20,8 +20,8 @@ void main() {
     'phone': '061234567',
     'role': 'LIVREUR',
     'driverStatus': 'AVAILABLE',
-    if (statusUser != null) 'statusUser': statusUser,
-    if (profile != null) 'driverProfile': profile,
+    'statusUser': ?statusUser,
+    'driverProfile': ?profile,
   };
 
   group('AppUser.fromJson', () {
