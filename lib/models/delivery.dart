@@ -8,6 +8,8 @@ import 'order.dart';
 /// `en_transit` « j'ai le repas et je roule vers le client ». Sans cette
 /// distinction, accepter une mission faisait croire au client que sa commande
 /// était déjà en route.
+// Noms calqués sur l’enum backend ; le format réseau passe par `fromString`.
+// ignore: constant_identifier_names
 enum DeliveryStatus { en_attente, assigner, accepter, en_transit, livrer, echec }
 
 extension DeliveryStatusX on DeliveryStatus {
