@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../../../models/delivery_failure.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
@@ -24,6 +25,14 @@ class DeliveryRepository {
       return decoded['data'] as List<dynamic>;
     }
     throw const FormatException('Liste API invalide');
+  }
+
+  /// `{ data: {...} }` ou l'objet brut.
+  Map<String, dynamic> _payload(dynamic decoded) {
+    final json = _asObject(decoded);
+    return json['data'] is Map<String, dynamic>
+        ? json['data'] as Map<String, dynamic>
+        : json;
   }
 
   Delivery _toDelivery(dynamic decoded) {
@@ -151,6 +160,42 @@ class DeliveryRepository {
       body: {'status': status.toApiString(), 'handoverCode': ?handoverCode},
     );
     return _toDelivery(res.data);
+  }
+
+  // ─── Échec de livraison (F3-05) ──────────────────────────────────────────
+
+  /// POST /deliveries/:id/unreachable/start — SMS et push au client, le
+  /// minuteur démarre. Idempotent : rouvrir l'écran après un redémarrage
+  /// rend le protocole en cours, sans second SMS.
+  Future<UnreachableProtocol> startUnreachable(String id) async {
+    final res = await _api.postJson('/deliveries/$id/unreachable/start');
+    return UnreachableProtocol.fromJson(_payload(res.data));
+  }
+
+  /// POST /deliveries/:id/unreachable/call — une tentative d'appel.
+  Future<UnreachableProtocol> logCall(String id) async {
+    final res = await _api.postJson('/deliveries/$id/unreachable/call');
+    return UnreachableProtocol.fromJson(_payload(res.data));
+  }
+
+  /// POST /deliveries/:id/failure — déclarer l'échec. La commande ne change
+  /// pas : c'est l'administration qui conclut et décide qui en répond.
+  Future<void> declareFailure(
+    String id, {
+    required DeliveryFailureReason reason,
+    String? note,
+    double? latitude,
+    double? longitude,
+  }) async {
+    await _api.postJson(
+      '/deliveries/$id/failure',
+      body: {
+        'reason': reason.wire,
+        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+        'latitude': ?latitude,
+        'longitude': ?longitude,
+      },
+    );
   }
 
   /// PATCH /deliveries/driver-status — changer le statut du livreur

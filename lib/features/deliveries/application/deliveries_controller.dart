@@ -1,5 +1,6 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../models/delivery.dart';
+import '../../../models/delivery_failure.dart';
 import '../../../core/network/api_exception.dart';
 import '../data/delivery_repository.dart';
 import 'location_service.dart';
@@ -196,16 +197,28 @@ class DeliveryDetailController extends _$DeliveryDetailController {
     ref.read(missionsControllerProvider.notifier).refresh();
   }
 
-  Future<void> markFailed() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(
-      () => ref
-          .read(deliveryRepositoryProvider)
-          .updateStatus(deliveryId, DeliveryStatus.echec),
-    );
+  /// Déclare l'échec (F3-05), avec la position de la course comme preuve.
+  ///
+  /// ⚠️ Lève en cas de refus (attente du protocole non écoulée, réseau) : la
+  /// course reste ouverte et le livreur sait pourquoi.
+  Future<void> declareFailure(
+    DeliveryFailureReason reason, {
+    String? note,
+  }) async {
+    final position = ref.read(locationServiceProvider).lastPosition;
+    await ref
+        .read(deliveryRepositoryProvider)
+        .declareFailure(
+          deliveryId,
+          reason: reason,
+          note: note,
+          latitude: position?.latitude,
+          longitude: position?.longitude,
+        );
     ref.read(locationServiceProvider).stopTracking();
     // La course est terminée : une alerte de suivi n'a plus d'objet.
     ref.read(trackingIssueControllerProvider.notifier).clear();
     ref.read(missionsControllerProvider.notifier).refresh();
+    ref.invalidateSelf();
   }
 }
