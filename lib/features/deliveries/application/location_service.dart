@@ -29,6 +29,10 @@ class LocationService {
   String? _activeDeliveryId;
   String? _activeOrderId;
   Position? _lastPosition;
+
+  /// Dernière position reçue pendant la course — jointe à une déclaration
+  /// d'échec (F3-05) comme preuve de présence. `null` hors course.
+  Position? get lastPosition => _lastPosition;
   DateTime? _lastPublishedAt;
   int _publishCount = 0;
 

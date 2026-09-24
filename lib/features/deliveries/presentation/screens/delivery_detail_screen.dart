@@ -1,4 +1,5 @@
 import '../widgets/handover_code_dialog.dart';
+import '../widgets/delivery_issue_sheet.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -394,42 +395,21 @@ class _DeliveryDetailBody extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 8),
+            // F3-05 : « Problème » ouvre les motifs, et pour « client
+            // injoignable » le protocole (SMS, appels, attente). Le livreur
+            // déclare ; l'administration conclut.
             OutlinedButton.icon(
               onPressed: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Signaler un échec'),
-                    content: const Text(
-                      'Confirmer que la livraison a échoué ?',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => ctx.pop(false),
-                        child: const Text('Annuler'),
-                      ),
-                      TextButton(
-                        onPressed: () => ctx.pop(true),
-                        child: const Text(
-                          'Confirmer',
-                          style: TextStyle(color: AppColors.error),
-                        ),
-                      ),
-                    ],
-                  ),
+                final declared = await showDeliveryIssueSheet(
+                  context,
+                  deliveryId: deliveryId,
+                  clientPhone: delivery.order?.effectivePhone,
                 );
-                if (confirm == true && context.mounted) {
-                  await ref
-                      .read(
-                        deliveryDetailControllerProvider(deliveryId).notifier,
-                      )
-                      .markFailed();
-                  if (context.mounted) context.pop();
-                }
+                if (declared && context.mounted) context.pop();
               },
-              icon: const Icon(Icons.cancel_outlined, color: AppColors.error),
+              icon: const Icon(Icons.report_problem_outlined, color: AppColors.error),
               label: const Text(
-                'Signaler un échec',
+                'Problème',
                 style: TextStyle(color: AppColors.error),
               ),
             ),
