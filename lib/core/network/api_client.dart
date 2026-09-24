@@ -11,6 +11,7 @@ import 'interceptors/auth_interceptor.dart';
 import 'interceptors/error_interceptor.dart';
 import 'interceptors/retry_interceptor.dart';
 import 'network_observer.dart';
+import '../../features/auth/application/session_guard.dart';
 
 part 'api_client.g.dart';
 
@@ -134,8 +135,13 @@ class ApiClient {
       RequestSnapshot(method: o.method, path: o.path, statusCode: status);
 }
 
+/// Seul endroit traversé par **toutes** les erreurs d'API : c'est là que la
+/// garde de session voit un compte refusé, quel que soit l'écran.
 @Riverpod(keepAlive: true)
-NetworkObserver networkObserver(Ref ref) => const NoopNetworkObserver();
+NetworkObserver networkObserver(Ref ref) => SessionAwareNetworkObserver(
+  const NoopNetworkObserver(),
+  ref.read(sessionGuardProvider.notifier),
+);
 
 @Riverpod(keepAlive: true)
 ApiClient apiClient(Ref ref) {

@@ -8,14 +8,21 @@ part of 'api_client.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
+/// Seul endroit traversé par **toutes** les erreurs d'API : c'est là que la
+/// garde de session voit un compte refusé, quel que soit l'écran.
 
 @ProviderFor(networkObserver)
 final networkObserverProvider = NetworkObserverProvider._();
+
+/// Seul endroit traversé par **toutes** les erreurs d'API : c'est là que la
+/// garde de session voit un compte refusé, quel que soit l'écran.
 
 final class NetworkObserverProvider
     extends
         $FunctionalProvider<NetworkObserver, NetworkObserver, NetworkObserver>
     with $Provider<NetworkObserver> {
+  /// Seul endroit traversé par **toutes** les erreurs d'API : c'est là que la
+  /// garde de session voit un compte refusé, quel que soit l'écran.
   NetworkObserverProvider._()
     : super(
         from: null,
@@ -49,7 +56,7 @@ final class NetworkObserverProvider
   }
 }
 
-String _$networkObserverHash() => r'eec087b935475284b01f88e6d8ed68a3592f8b2c';
+String _$networkObserverHash() => r'd9b4803a271603e296132907ac733f8b27eb81d4';
 
 @ProviderFor(apiClient)
 final apiClientProvider = ApiClientProvider._();

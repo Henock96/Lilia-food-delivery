@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../utilities/app_theme.dart';
 import '../../application/auth_controller.dart';
+import '../../application/session_guard.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
@@ -26,12 +27,14 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text;
     if (email.isEmpty || password.isEmpty) return;
+    ref.read(sessionEndedNoticeProvider.notifier).clear();
     await ref.read(authControllerProvider.notifier).signIn(email, password);
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(authControllerProvider);
+    final sessionEnded = ref.watch(sessionEndedNoticeProvider);
 
     ref.listen(authControllerProvider, (_, next) {
       next.whenOrNull(
@@ -52,6 +55,20 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Déconnexion forcée (compte supprimé ou suspendu) : on dit
+              // pourquoi l'app est revenue ici.
+              if (sessionEnded != null)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    sessionEnded,
+                    style: const TextStyle(color: AppColors.error),
+                  ),
+                ),
               const SizedBox(height: 32),
               Container(
                 width: 80,
