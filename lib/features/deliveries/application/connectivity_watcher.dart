@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import 'package:lilia_food_delivery/features/deliveries/application/position_batch_flusher.dart';
 import 'package:lilia_food_delivery/features/deliveries/application/position_queue_service.dart';
 import 'package:lilia_food_delivery/features/deliveries/data/delivery_repository.dart';
 
@@ -40,25 +41,30 @@ class ConnectivityWatcher {
     _wasOffline = !isOnline;
   }
 
-  /// Flush en boucle par batches de 50 tant qu'il reste des positions
-  /// ET que le serveur répond OK. Public pour pouvoir être appelé depuis
-  /// TrackingResumeService au resume foreground (ceinture+bretelles).
-  Future<void> flushQueue() async {
+  Future<void>? _inFlight;
+
+  /// Vide la file des positions hors ligne. Public pour pouvoir être appelé
+  /// depuis TrackingResumeService au resume foreground (ceinture+bretelles).
+  ///
+  /// Un seul vidage à la fois : retour réseau et reprise de l'app arrivent
+  /// souvent ensemble, et deux vidages parallèles enverraient deux fois les
+  /// mêmes positions.
+  Future<void> flushQueue() => _inFlight ??= _flush().whenComplete(() {
+        _inFlight = null;
+      });
+
+  Future<void> _flush() async {
     final queue = await _ref.read(positionQueueServiceProvider.future);
     final repo = _ref.read(deliveryRepositoryProvider);
-
-    while (queue.queuedCount > 0) {
-      final batch = await queue.drainBatch(50);
-      if (batch.isEmpty) break;
-      final ok = await repo.sendPositionsBatch(
-        batch.map((p) => p.toJson()).toList(),
-      );
-      if (!ok) {
-        debugPrint('📡 Batch send failed, will retry next trigger');
-        break;
-      }
-      await queue.markFlushed(batch.length);
-    }
+    final report = await PositionBatchFlusher(
+      queue: queue,
+      send: repo.sendPositionsBatch,
+    ).flush();
+    debugPrint(
+      '📡 Flush positions : ${report.sent} envoyée(s), ${report.dropped} '
+      'abandonnée(s), ${report.batches} lot(s)'
+      '${report.stoppedOnTransientError ? ' — reprise au prochain déclencheur' : ''}',
+    );
   }
 }
 

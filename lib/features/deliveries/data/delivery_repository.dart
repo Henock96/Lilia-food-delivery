@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import '../../../models/delivery_failure.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/network/api_client.dart';
@@ -223,21 +222,25 @@ class DeliveryRepository {
     );
   }
 
-  /// Envoie un batch de positions GPS accumulées offline.
-  /// Backend : POST /tracking/position/batch — body `{ positions: [...] }`.
-  /// Retourne true si succès, false sinon (la queue n'est pas vidée).
-  Future<bool> sendPositionsBatch(List<Map<String, dynamic>> positions) async {
-    if (positions.isEmpty) return true;
-    try {
-      await _api.postJson(
-        '/tracking/position/batch',
-        body: {'positions': positions},
-      );
-      return true;
-    } catch (e) {
-      debugPrint('⚠️ sendPositionsBatch failed: $e');
-      return false;
-    }
+  /// Envoie un lot de positions GPS accumulées hors ligne, pour UNE commande.
+  ///
+  /// Backend : `POST /tracking/position/batch`, corps
+  /// `{ orderId, positions: [{ lat, lng, timestamp, accuracy? }] }`
+  /// (`BatchPositionsDto`). Lève une `ApiException` en cas d'échec : c'est
+  /// `classifyTrackingError` qui décide de garder ou d'abandonner le lot.
+  ///
+  /// ⚠️ L'ancien corps (`{ positions: [{ latitude, recordedAt ISO… }] }`, sans
+  /// `orderId`) était rejeté en 400 à CHAQUE envoi : la file ne se vidait
+  /// jamais (F3-12.1, gate R8).
+  Future<void> sendPositionsBatch(
+    String orderId,
+    List<Map<String, dynamic>> positions,
+  ) async {
+    if (positions.isEmpty) return;
+    await _api.postJson(
+      '/tracking/position/batch',
+      body: {'orderId': orderId, 'positions': positions},
+    );
   }
 
   /// GET /drivers/me — compte **et** profil métier du livreur connecté.
