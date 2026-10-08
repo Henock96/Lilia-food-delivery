@@ -8,6 +8,8 @@ import 'package:lilia_food_delivery/core/network/api_exception.dart';
 import 'package:lilia_food_delivery/features/deliveries/application/deliveries_controller.dart';
 import 'package:lilia_food_delivery/features/deliveries/application/location_service.dart';
 import 'package:lilia_food_delivery/features/deliveries/data/delivery_repository.dart';
+import 'package:lilia_food_delivery/features/profile/application/profile_controller.dart';
+import 'package:lilia_food_delivery/models/app_user.dart';
 import 'package:lilia_food_delivery/models/delivery.dart';
 
 /// DEL-003 — après un échec ambigu, l'app relit l'état du serveur au lieu de
@@ -64,6 +66,13 @@ class _FakeRepo extends DeliveryRepository {
 
   int mutationCalls = 0;
   int getCalls = 0;
+  int getMeCalls = 0;
+
+  @override
+  Future<AppUser> getMe() async {
+    getMeCalls++;
+    return AppUser.fromJson({'id': 'liv1', 'role': 'LIVREUR'});
+  }
 
   Future<Delivery> _mutate() async {
     mutationCalls++;
@@ -293,4 +302,19 @@ void main() {
     expect(repo.mutationCalls, 2);
     expect(shown(), DeliveryStatus.livrer);
   });
+
+  test('livraison conclue ⇒ profil relu (le serveur a rendu le livreur '
+      'disponible : le polling des missions doit pouvoir reprendre)', () async {
+    final c = await open('EN_TRANSIT');
+    container.listen(profileControllerProvider, (_, _) {});
+    await container.read(profileControllerProvider.future);
+    final before = repo.getMeCalls;
+    repo.commitTo = 'LIVRER';
+
+    await c.markDelivered(handoverCode: '1234');
+    await container.read(profileControllerProvider.future);
+
+    expect(repo.getMeCalls, before + 1);
+  });
 }
+

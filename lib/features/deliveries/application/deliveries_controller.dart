@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../models/delivery.dart';
 import '../../../models/delivery_failure.dart';
 import '../../../core/network/api_exception.dart';
+import '../../profile/application/profile_controller.dart';
 import '../data/delivery_repository.dart';
 import 'location_service.dart';
 import 'tracking_issue.dart';
@@ -22,6 +23,28 @@ class MissionsController extends _$MissionsController {
     );
   }
 
+  /// Relecture de fond (DEL-005) : retour au premier plan, polling.
+  ///
+  /// Contrairement à [refresh], la liste affichée reste à l'écran pendant la
+  /// requête — un spinner toutes les 60 s rendrait la liste inutilisable. Un
+  /// échec ne remplace pas une liste déjà affichée par un écran d'erreur : le
+  /// prochain cycle réessaie, et le geste manuel « Réessayer » reste là pour
+  /// montrer l'erreur. Sans liste à l'écran, l'erreur est montrée.
+  ///
+  /// Rend `true` si la liste a été mise à jour.
+  Future<bool> syncSilently() async {
+    try {
+      final missions = await ref
+          .read(deliveryRepositoryProvider)
+          .getMyMissions();
+      state = AsyncValue.data(missions);
+      return true;
+    } catch (e, st) {
+      if (!state.hasValue) state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
   /// Accepte la mission. Le tracking GPS ne démarre PAS ici : le livreur n'a
   /// pas encore le repas, diffuser sa position ferait croire au client que la
   /// commande est en route. Il démarre à la récupération ([confirmPickup]).
@@ -30,6 +53,7 @@ class MissionsController extends _$MissionsController {
     try {
       await ref.read(deliveryRepositoryProvider).acceptDelivery(deliveryId);
       ref.invalidateSelf();
+      _driverStatusMoved(ref);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
@@ -89,10 +113,12 @@ class DeliveryDetailController extends _$DeliveryDetailController {
         Error.throwWithStackTrace(e, st);
       }
       ref.read(missionsControllerProvider.notifier).refresh();
+      _driverStatusMoved(ref);
       return;
     }
     state = AsyncValue.data(delivery);
     ref.read(missionsControllerProvider.notifier).refresh();
+    _driverStatusMoved(ref);
   });
 
   // ─── Mutations critiques : la vérité est relue au serveur (DEL-003) ───────
@@ -252,6 +278,7 @@ class DeliveryDetailController extends _$DeliveryDetailController {
         }
         _endTracking();
         ref.read(missionsControllerProvider.notifier).refresh();
+        _driverStatusMoved(ref);
       });
 
   /// La course est close : plus de position à partager, plus d'alerte de
@@ -283,6 +310,13 @@ class DeliveryDetailController extends _$DeliveryDetailController {
     // La course est terminée : une alerte de suivi n'a plus d'objet.
     ref.read(trackingIssueControllerProvider.notifier).clear();
     ref.read(missionsControllerProvider.notifier).refresh();
+    _driverStatusMoved(ref);
     ref.invalidateSelf();
   }
 }
+
+/// Le serveur change le statut du livreur avec la course : `ON_DELIVERY` à
+/// l'acceptation, retour à `AVAILABLE` à la clôture (DEL-005). Le profil est
+/// relu, sans quoi l'app le croirait encore en course — et le polling des
+/// missions, réservé au livreur disponible, ne reprendrait jamais.
+void _driverStatusMoved(Ref ref) => ref.invalidate(profileControllerProvider);
