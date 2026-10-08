@@ -54,6 +54,26 @@ extension AccountStatusX on AccountStatus {
   };
 }
 
+/// Type de profil du livreur (`DriverEmploymentType`). D-PAY : c'est la
+/// SEULE donnée économique que le livreur voit de lui-même — jamais son modèle
+/// de rémunération ni son pourcentage.
+enum EmploymentType { lilia, independent }
+
+extension EmploymentTypeX on EmploymentType {
+  String get label => switch (this) {
+    EmploymentType.lilia => 'Livreur Lilia',
+    EmploymentType.independent => 'Livreur indépendant',
+  };
+
+  /// `null` pour une valeur absente ou inconnue : rien n'est affiché plutôt
+  /// qu'un type deviné.
+  static EmploymentType? fromString(String? s) => switch (s?.toUpperCase()) {
+    'LILIA' => EmploymentType.lilia,
+    'INDEPENDENT' => EmploymentType.independent,
+    _ => null,
+  };
+}
+
 enum VehicleType { moto, velo, voiture, pieton }
 
 extension VehicleTypeX on VehicleType {
@@ -87,6 +107,9 @@ class DriverProfile {
   /// Quartiers d'affectation. Vide = toute la ville.
   final List<String> zones;
 
+  /// Livreur Lilia ou indépendant — `null` si le serveur ne le dit pas.
+  final EmploymentType? employmentType;
+
   const DriverProfile({
     required this.vehicleType,
     this.plateNumber,
@@ -95,6 +118,7 @@ class DriverProfile {
     required this.isActive,
     this.activatedAt,
     this.zones = const [],
+    this.employmentType,
   });
 
   factory DriverProfile.fromJson(Map<String, dynamic> json) => DriverProfile(
@@ -108,6 +132,9 @@ class DriverProfile {
         .map((z) => _stringValue((z as Map<String, dynamic>?)?['nom']))
         .where((n) => n.isNotEmpty)
         .toList(),
+    employmentType: EmploymentTypeX.fromString(
+      _nullableString(json['employmentType']),
+    ),
   );
 
   /// Le permis expire-t-il dans moins de 30 jours (ou est-il déjà expiré) ?

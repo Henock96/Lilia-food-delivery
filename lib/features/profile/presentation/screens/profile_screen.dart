@@ -6,7 +6,6 @@ import '../../../../utilities/app_theme.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../application/profile_controller.dart';
 import '../../data/ratings_repository.dart';
-import 'my_earnings_screen.dart';
 import 'my_ratings_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -73,32 +72,9 @@ class _ProfileBody extends ConsumerWidget {
           _RatingSummaryTile(delivererId: user.id),
           const SizedBox(height: 12),
 
-          // Accès à la rémunération. Placé sur le profil et non dans les
-          // missions : c'est une information sur LUI, pas sur une course.
-          Card(
-            child: ListTile(
-              leading: const Icon(
-                Icons.account_balance_wallet_outlined,
-                color: AppColors.primary,
-              ),
-              title: const Text(
-                'Mes gains',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: const Text(
-                'Ce qui vous reste dû et vos versements',
-                style: TextStyle(fontSize: 12),
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const MyEarningsScreen(),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-
+          // D-PAY (DEL-002, décision Q6) : plus d'accès « Mes gains ». Le
+          // livreur ne voit pas sa rémunération ; seul son type de profil est
+          // affiché (carte profil ci-dessous).
           // Driver status toggle
           Card(
             child: Padding(
@@ -168,6 +144,14 @@ class _ProfileBody extends ConsumerWidget {
                       style: TextStyle(color: AppColors.textMed, fontSize: 13),
                     )
                   else ...[
+                    if (profile.employmentType != null) ...[
+                      _InfoTile(
+                        icon: Icons.badge_outlined,
+                        label: 'Type de profil',
+                        value: profile.employmentType!.label,
+                      ),
+                      const Divider(),
+                    ],
                     _InfoTile(
                       icon: Icons.two_wheeler_outlined,
                       label: 'Véhicule',
