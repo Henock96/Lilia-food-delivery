@@ -419,7 +419,16 @@ Résultat : `flutter analyze` **0 erreur / 0 warning**, tests **21/21**.
       ⚠️ Reste hors de portée : l'app **complètement fermée** (force-stop ou
       tuée par l'OS). Aucune solution Flutter n'y répond sans un service
       redémarré au boot, hors périmètre.
-- [ ] **Sync offline batch** : utiliser `POST /tracking/position/batch` quand le réseau revient après une coupure (positions accumulées localement entre-temps)
+- [x] ~~Sync offline batch~~ — corrigé le 28/09/2026 (F3-12.1, gate R8).
+      Le lot partait sans `orderId`, avec `latitude`/`recordedAt` ISO : 400 à
+      chaque envoi, file jamais vidée, rejouée à chaque retour réseau.
+      Désormais : `PositionBatchFlusher` regroupe par `orderId`, trie, envoie
+      `{orderId, positions:[{lat, lng, timestamp ms, accuracy?}]}` ; 2xx ⇒
+      retiré, 4xx définitif ⇒ abandonné (jamais rejoué), panne passagère ⇒
+      gardé. Seul un échec PASSAGER du `PATCH` entre dans la file
+      (`tracking_batch_policy.dart`). Contrat figé par
+      `test/contract/tracking_position_batch.v1.json`, **copié à l'identique**
+      dans `lilia-backend/test/contracts/` : les modifier ensemble.
 
 ---
 
