@@ -9,31 +9,35 @@ import 'package:lilia_food_delivery/models/delivery.dart';
 ///
 /// ## Le scénario, qui n'a rien d'exotique sur la 4G de Brazzaville
 ///
-/// `RetryInterceptor` rejoue automatiquement `PATCH` sur 5xx et timeout. Si
-/// `PATCH /deliveries/:id/accept` **expire après** que le serveur a commis, le
-/// rejeu tombe sur le verrou optimiste et reçoit « Livraison déjà acceptée ou
-/// non assignée ».
+/// `PATCH /deliveries/:id/accept` **expire après** que le serveur a commis, ou
+/// un second appareil a déjà agi : le serveur répond « Livraison déjà acceptée
+/// ou non assignée », ou la réponse ne revient jamais.
 ///
-/// Le backend a raison. Mais le contrôleur plaçait l'état en `AsyncValue.error`
-/// **sans resynchroniser** : le livreur voyait une erreur sur une action qui
-/// avait réussi, et devait tirer pour rafraîchir.
+/// Le contrôleur plaçait l'état en `AsyncValue.error` **sans resynchroniser** :
+/// le livreur voyait une erreur sur une action qui avait réussi, et devait
+/// tirer pour rafraîchir.
 ///
-/// ## Pourquoi seulement sur un conflit
+/// ## Pourquoi aussi sur une coupure réseau (DEL-003, octobre 2026)
 ///
-/// Rafraîchir sur **toute** erreur ferait marteler l'API pendant une coupure
-/// réseau — précisément quand elle est déjà en difficulté, et alors que rien
-/// n'a changé côté serveur. On ne resynchronise que lorsque le serveur nous
-/// dit que l'état a bougé, c'est-à-dire sur un 4xx.
+/// Cette suite exigeait autrefois de NE PAS relire sur une coupure, pour ne pas
+/// marteler l'API. Mais depuis que les `PATCH` ne sont plus rejoués
+/// automatiquement, une coupure est justement le cas ambigu : le serveur a
+/// peut-être commis. Une seule relecture par geste du livreur tranche la
+/// question ; ce n'est pas un martèlement.
 class _FakeRepository implements DeliveryRepository {
   _FakeRepository(this._onAccept);
 
   final Future<Delivery> Function() _onAccept;
   int getDeliveryCalls = 0;
 
-  static final _delivery = Delivery.fromJson({
+  /// État réel côté serveur, tel que la relecture le rend. `ASSIGNER` : le
+  /// geste n'a pas eu lieu ; `EN_ATTENTE` : la mission a été retirée.
+  String serverStatus = 'ASSIGNER';
+
+  Delivery get _delivery => Delivery.fromJson({
     'id': 'd1',
     'orderId': 'o1',
-    'status': 'ACCEPTER',
+    'status': serverStatus,
   });
 
   @override
@@ -91,6 +95,7 @@ void main() {
         kind: ApiErrorKind.client,
       ),
     );
+    repo.serverStatus = 'EN_ATTENTE'; // mission retirée entre-temps
     watchLikeTheScreen();
     await container.read(deliveryDetailControllerProvider('d1').future);
     final before = repo.getDeliveryCalls;
@@ -106,7 +111,7 @@ void main() {
     );
   });
 
-  test('une coupure réseau ne déclenche AUCUNE relecture', () async {
+  test('une coupure réseau déclenche UNE relecture (DEL-003)', () async {
     build(
       () async => throw const ApiException(
         'Connexion impossible. Vérifiez votre réseau.',
@@ -120,9 +125,8 @@ void main() {
     await expectLater(notifier().acceptDelivery(), throwsA(isA<ApiException>()));
     await Future<void>.delayed(Duration.zero);
 
-    // Rien n'a changé côté serveur, et le réseau est déjà en difficulté :
-    // insister le martèlerait pour rien.
-    expect(repo.getDeliveryCalls, before);
+    // Le serveur a peut-être commis : une relecture, une seule, le dira.
+    expect(repo.getDeliveryCalls, before + 1);
   });
 
   test('l’erreur reste remontée à l’appelant', () async {
@@ -137,7 +141,9 @@ void main() {
     await container.read(deliveryDetailControllerProvider('d1').future);
 
     // La resynchronisation ne doit pas avaler l'erreur : l'écran affiche
-    // toujours le message, il cesse seulement d'être périmé.
+    // toujours le message, il cesse seulement d'être périmé. (Si la relecture
+    // disait ACCEPTER, l'acceptation aurait eu lieu et il n'y aurait pas
+    // d'erreur : voir `critical_mutation_reconcile_test.dart`.)
     await expectLater(notifier().acceptDelivery(), throwsA(isA<ApiException>()));
   });
 }

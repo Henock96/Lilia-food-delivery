@@ -227,12 +227,26 @@ class _DeliveryDetailBody extends ConsumerWidget {
               child: ElevatedButton.icon(
                 onPressed: (order == null || order.isReadyToPickup)
                     ? () async {
-                        await ref
-                            .read(
-                              deliveryDetailControllerProvider(deliveryId)
-                                  .notifier,
-                            )
-                            .acceptDelivery();
+                        try {
+                          await ref
+                              .read(
+                                deliveryDetailControllerProvider(deliveryId)
+                                    .notifier,
+                              )
+                              .acceptDelivery();
+                        } catch (e) {
+                          // L'écran montre déjà l'état relu au serveur ; on
+                          // dit pourquoi le geste n'a pas abouti.
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Acceptation impossible : $e'),
+                                backgroundColor: AppColors.error,
+                              ),
+                            );
+                          }
+                          return;
+                        }
                         ref.invalidate(
                           deliveryDetailControllerProvider(deliveryId),
                         );
