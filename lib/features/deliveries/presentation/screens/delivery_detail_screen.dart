@@ -221,10 +221,13 @@ class _DeliveryDetailBody extends ConsumerWidget {
                           }
                           return;
                         }
+                        // Écran quitté pendant la requête : `ref` n'est plus
+                        // utilisable, et il n'y a rien à rafraîchir.
+                        if (!context.mounted) return;
                         ref.invalidate(
                           deliveryDetailControllerProvider(deliveryId),
                         );
-                        if (context.mounted) context.pop();
+                        context.pop();
                       }
                     : null,
                 icon: const Icon(Icons.check),
@@ -318,6 +321,7 @@ class _DeliveryDetailBody extends ConsumerWidget {
                         deliveryDetailControllerProvider(deliveryId).notifier,
                       )
                       .confirmPickup();
+                  if (!context.mounted) return;
                   ref.invalidate(deliveryDetailControllerProvider(deliveryId));
 
                   // La récupération a réussi ; seule la localisation manque.

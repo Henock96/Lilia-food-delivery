@@ -39,7 +39,14 @@ class ConnectivityWatcher {
     );
     if (_wasOffline && isOnline) {
       debugPrint('📡 Réseau revenu → flush position queue');
-      unawaited(flushQueue());
+      // Filet : ce déclencheur n'a pas d'appelant pour recevoir l'erreur
+      // (stockage local en échec, par exemple). Les positions restent en
+      // file ; le prochain déclencheur réessaie.
+      unawaited(
+        flushQueue().catchError(
+          (Object e) => debugPrint('📡 Vidage de la file en échec : $e'),
+        ),
+      );
     }
     _wasOffline = !isOnline;
   }

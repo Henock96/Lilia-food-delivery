@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../models/delivery.dart';
 import '../../../models/delivery_failure.dart';
@@ -40,6 +41,7 @@ class MissionsController extends _$MissionsController {
       state = AsyncValue.data(missions);
       return true;
     } catch (e, st) {
+      debugPrint('[Missions] relecture de fond en échec : $e');
       if (!state.hasValue) state = AsyncValue.error(e, st);
       return false;
     }
@@ -141,12 +143,18 @@ class DeliveryDetailController extends _$DeliveryDetailController {
   Future<T> _once<T>(String key, Future<T> Function() action) {
     final running = _inFlight[key];
     if (running != null) return running.then((v) => v as T);
+    // Le contrôleur est autoDispose : un livreur qui revient en arrière
+    // pendant la requête le détruisait avant la réponse, et ce qui suit
+    // l'`await` (démarrer ou arrêter le suivi GPS) n'avait jamais lieu alors
+    // que le serveur, lui, avait conclu. Il reste en vie jusqu'à l'issue.
+    final keepAlive = ref.keepAlive();
     final future = action();
     _inFlight[key] = future;
     // Libère la garde quelle que soit l'issue ; l'erreur, elle, reste à
     // l'appelant via `future`.
     future.then<void>((_) {}, onError: (_) {}).whenComplete(() {
       if (identical(_inFlight[key], future)) _inFlight.remove(key);
+      keepAlive.close();
     });
     return future;
   }
@@ -162,39 +170,47 @@ class DeliveryDetailController extends _$DeliveryDetailController {
           .getDelivery(deliveryId);
       state = AsyncValue.data(server);
       return server;
-    } catch (_) {
+    } catch (e) {
+      // L'erreur d'origine est remontée par l'appelant ; celle-ci est tracée
+      // pour qu'une double panne (mutation + relecture) reste diagnostiquable.
+      debugPrint('[DeliveryDetail] relecture après échec impossible : $e');
       state = previous;
       return null;
     }
   }
 
-  /// Relit l'état réel quand le serveur dit que la course a bougé — pour le
-  /// refus de mission. Accept, récupération et livraison passent, eux, par
-  /// [_reconcile], qui relit sur TOUT échec : sans rejeu automatique des
-  /// `PATCH`, une coupure réseau est précisément le cas ambigu.
-  ///
-  /// Best-effort : la relecture ne doit pas remplacer l'erreur d'origine, que
-  /// l'appelant affiche au livreur.
-  void _resyncIfServerMovedOn(Object error) {
-    if (error is! ApiException || error.kind != ApiErrorKind.client) return;
-    ref.invalidateSelf();
-    ref.read(missionsControllerProvider.notifier).refresh();
-  }
-
   /// Refuse la mission : elle redevient assignable pour le vendeur.
-  Future<void> declineDelivery({String? reason}) async {
+  ///
+  /// Comme les autres gestes (DEL-003), un échec est tranché par une
+  /// relecture — mais le refus a une signature propre : réussi, la course
+  /// n'appartient plus au livreur et sa relecture est refusée (403/404).
+  Future<void> declineDelivery({String? reason}) => _once('decline', () async {
+    final previous = state;
     state = const AsyncValue.loading();
+    final repo = ref.read(deliveryRepositoryProvider);
     try {
-      await ref
-          .read(deliveryRepositoryProvider)
-          .declineDelivery(deliveryId, reason: reason);
-      ref.read(missionsControllerProvider.notifier).refresh();
+      await repo.declineDelivery(deliveryId, reason: reason);
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
-      _resyncIfServerMovedOn(e);
-      rethrow;
+      try {
+        final server = await repo.getDelivery(deliveryId);
+        // Toujours la sienne : le refus n'a pas eu lieu.
+        state = AsyncValue.data(server);
+      } on ApiException catch (read) {
+        if (read.statusCode == 403 || read.statusCode == 404) {
+          // Plus la sienne : le refus est acquis, la réponse s'était perdue.
+          ref.read(missionsControllerProvider.notifier).refresh();
+          return;
+        }
+        debugPrint('[DeliveryDetail] relecture après refus impossible : $read');
+        state = previous;
+      } catch (read) {
+        debugPrint('[DeliveryDetail] relecture après refus impossible : $read');
+        state = previous;
+      }
+      Error.throwWithStackTrace(e, st);
     }
-  }
+    ref.read(missionsControllerProvider.notifier).refresh();
+  });
 
   /// Confirme la récupération du repas : ACCEPTER → EN_TRANSIT.
   ///

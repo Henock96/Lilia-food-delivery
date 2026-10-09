@@ -86,7 +86,20 @@ class _FakeRepo extends DeliveryRepository {
   Future<Delivery> getDelivery(String id) async {
     getCalls++;
     if (getFails) throw _network;
+    // Course refusée : elle n'appartient plus à ce livreur (anti-IDOR).
+    if (server == 'DECLINED') {
+      throw const ApiException(
+        'Vous n’êtes pas autorisé à consulter cette livraison.',
+        statusCode: 403,
+        kind: ApiErrorKind.client,
+      );
+    }
     return _d(server);
+  }
+
+  @override
+  Future<void> declineDelivery(String id, {String? reason}) async {
+    await _mutate();
   }
 
   @override
@@ -148,6 +161,7 @@ void main() {
   late _FakeRepo repo;
   late _FakeLocation location;
   late ProviderContainer container;
+  late ProviderSubscription<AsyncValue<Delivery>> screen;
 
   Future<DeliveryDetailController> open(String status) async {
     repo = _FakeRepo(status);
@@ -160,7 +174,10 @@ void main() {
     );
     addTearDown(container.dispose);
     // Abonné comme l'écran : sans lui, un provider autoDispose disparaît.
-    container.listen(deliveryDetailControllerProvider('d1'), (_, _) {});
+    screen = container.listen(
+      deliveryDetailControllerProvider('d1'),
+      (_, _) {},
+    );
     await container.read(deliveryDetailControllerProvider('d1').future);
     return container.read(deliveryDetailControllerProvider('d1').notifier);
   }
@@ -315,6 +332,76 @@ void main() {
     await container.read(profileControllerProvider.future);
 
     expect(repo.getMeCalls, before + 1);
+  });
+
+  // Revue ECC (flutter-reviewer) : le contrôleur est autoDispose. Le livreur
+  // qui touche « J'ai récupéré » puis revient en arrière pendant la requête
+  // détruisait le contrôleur avant la réponse : le serveur passait EN_TRANSIT
+  // (le client voit « en route ») mais le suivi GPS ne démarrait jamais.
+  group('écran quitté pendant la requête', () {
+    test('récupération : le suivi démarre quand même', () async {
+      final c = await open('ACCEPTER');
+      repo
+        ..commitTo = 'EN_TRANSIT'
+        ..gate = Completer<void>();
+
+      final pending = c.confirmPickup();
+      screen.close(); // retour arrière : plus aucun écouteur
+      await Future<void>.delayed(Duration.zero);
+      repo.gate!.complete();
+      await pending;
+
+      expect(location.tracking, 'd1');
+    });
+
+    test('livraison : le suivi s’arrête quand même', () async {
+      final c = await open('EN_TRANSIT');
+      location.startTracking(deliveryId: 'd1', orderId: 'o1');
+      repo
+        ..commitTo = 'LIVRER'
+        ..gate = Completer<void>();
+
+      final pending = c.markDelivered(handoverCode: '1234');
+      screen.close();
+      await Future<void>.delayed(Duration.zero);
+      repo.gate!.complete();
+      await pending;
+
+      expect(location.tracking, isNull);
+    });
+  });
+
+  group('Refus de mission (PATCH /decline)', () {
+    test('refus commité, réponse perdue : relecture refusée (403) ⇒ succès',
+        () async {
+      final c = await open('ASSIGNER');
+      repo
+        ..commitTo = 'DECLINED'
+        ..mutationError = _network;
+
+      await c.declineDelivery();
+
+      expect(repo.mutationCalls, 1, reason: 'aucun rejeu automatique');
+    });
+
+    test('vrai échec : relu ASSIGNER ⇒ erreur remontée, mission affichée',
+        () async {
+      final c = await open('ASSIGNER');
+      repo.mutationError = _network;
+
+      await expectLater(c.declineDelivery(), throwsA(_network));
+      expect(shown(), DeliveryStatus.assigner);
+    });
+
+    test('serveur injoignable : erreur d’origine, écran inchangé', () async {
+      final c = await open('ASSIGNER');
+      repo
+        ..mutationError = _network
+        ..getFails = true;
+
+      await expectLater(c.declineDelivery(), throwsA(_network));
+      expect(shown(), DeliveryStatus.assigner);
+    });
   });
 }
 
