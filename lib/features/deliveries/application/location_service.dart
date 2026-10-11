@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../data/delivery_repository.dart';
 import 'position_queue_service.dart';
+import 'tracking_batch_policy.dart';
 import 'tracking_socket_service.dart';
 
 part 'location_service.g.dart';
@@ -241,9 +242,17 @@ class LocationService {
         position.accuracy,
       );
     } catch (e) {
+      // F3-12.1 R8 — seul un échec PASSAGER entre dans la file. Un 4xx (course
+      // hors EN_TRANSIT, livreur réassigné) y entrait aussi, pour n'en ressortir
+      // que par un autre 4xx, rejoué à chaque retour réseau.
+      if (!shouldQueueFailedPosition(e)) {
+        debugPrint('⚠️ HTTP PATCH location refusé, position abandonnée : $e');
+        return;
+      }
       debugPrint('⚠️ HTTP PATCH location failed, queueing: $e');
       final queue = await _ref.read(positionQueueServiceProvider.future);
       await queue.enqueue(QueuedPosition(
+        orderId: orderId,
         deliveryId: deliveryId,
         latitude: position.latitude,
         longitude: position.longitude,
