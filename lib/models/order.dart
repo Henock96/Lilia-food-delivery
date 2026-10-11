@@ -45,14 +45,12 @@ class OrderItem {
   final String id;
   final String productNom;
   final int quantity;
-  final int unitPrice;
   final bool madeToOrder;
 
   const OrderItem({
     required this.id,
     required this.productNom,
     required this.quantity,
-    required this.unitPrice,
     this.madeToOrder = false,
   });
 
@@ -60,7 +58,6 @@ class OrderItem {
         id: _stringValue(json['id']),
         productNom: _productName(json['product']),
         quantity: _intValue(json['quantite']),
-        unitPrice: _intValue(json['prix']),
         madeToOrder: (json['product'] is Map<String, dynamic>)
             ? ((json['product'] as Map<String, dynamic>)['madeToOrder'] as bool? ?? false)
             : false,
@@ -85,9 +82,8 @@ class DeliveryAddress {
 
 class DeliveryOrder {
   final String id;
-  final int total;
-  final int subTotal;
-  final int deliveryFee;
+  // D-PAY (DEL-002) : aucun montant. La commande est payée d'avance par
+  // mobile money ; le livreur n'encaisse rien et n'a rien à afficher.
   final DeliveryRestaurant? restaurant;
   final List<OrderItem> items;
   final DeliveryAddress? adresse;
@@ -113,9 +109,6 @@ class DeliveryOrder {
 
   const DeliveryOrder({
     required this.id,
-    required this.total,
-    required this.subTotal,
-    required this.deliveryFee,
     this.restaurant,
     required this.items,
     this.adresse,
@@ -168,9 +161,6 @@ class DeliveryOrder {
     }
     return DeliveryOrder(
       id: _stringValue(json['id']),
-      total: _intValue(json['total']),
-      subTotal: _intValue(json['subTotal']),
-      deliveryFee: _intValue(json['deliveryFee']),
       restaurant: json['restaurant'] != null &&
               json['restaurant'] is Map<String, dynamic>
           ? DeliveryRestaurant.fromJson(

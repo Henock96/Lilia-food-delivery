@@ -21,7 +21,7 @@ class ConnectivityWatcher {
 
   void start() {
     _sub?.cancel();
-    _sub = Connectivity().onConnectivityChanged.listen(_onChange);
+    _sub = Connectivity().onConnectivityChanged.listen(onConnectivityChanged);
     debugPrint('📡 ConnectivityWatcher started');
   }
 
@@ -30,13 +30,23 @@ class ConnectivityWatcher {
     _sub = null;
   }
 
-  void _onChange(List<ConnectivityResult> results) {
+  /// Point d'entrée d'une transition réseau. Public pour que le scénario
+  /// « hors ligne → réseau revenu → vidage » (T24) se teste sans plateforme.
+  @visibleForTesting
+  void onConnectivityChanged(List<ConnectivityResult> results) {
     final isOnline = results.any(
       (r) => r == ConnectivityResult.wifi || r == ConnectivityResult.mobile,
     );
     if (_wasOffline && isOnline) {
       debugPrint('📡 Réseau revenu → flush position queue');
-      unawaited(flushQueue());
+      // Filet : ce déclencheur n'a pas d'appelant pour recevoir l'erreur
+      // (stockage local en échec, par exemple). Les positions restent en
+      // file ; le prochain déclencheur réessaie.
+      unawaited(
+        flushQueue().catchError(
+          (Object e) => debugPrint('📡 Vidage de la file en échec : $e'),
+        ),
+      );
     }
     _wasOffline = !isOnline;
   }

@@ -2,11 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Config Release. Reste sur `development` tant que les builds sont signés
-	     avec un profil de développement (aligné sur lilia-app). À basculer sur
-	     `production` au moment de la première distribution App Store /
-	     TestFlight, sinon APNS rejette les tokens du sandbox. -->
+	<!-- Config Release = distribution (TestFlight / App Store) : APNs de
+	     PRODUCTION (DEL-004, octobre 2026, aligné sur lilia-app). Un token du
+	     sandbox est rejeté par APNs production, et inversement : un build
+	     distribué avec `development` ne recevait aucune mission poussée.
+	     Debug et Profile gardent `development` (Runner.entitlements) pour les
+	     essais sur appareil signés avec un profil de développement.
+	     ⚠️ Cette valeur ne prouve PAS que le push fonctionne : la clé APNs du
+	     projet Firebase doit aussi être valide (Team ID 4R7BCB3ZSZ). -->
 	<key>aps-environment</key>
-	<string>development</string>
+	<string>production</string>
 </dict>
 </plist>

@@ -37,7 +37,7 @@ final class MissionsControllerProvider
 }
 
 String _$missionsControllerHash() =>
-    r'a800da2f7cd5979518aab74c58b53c2c5e42245c';
+    r'ddff9cb8a2a72cfd88d6af90648b352ec46de61a';
 
 /// Liste de mes missions actives (ASSIGNER + EN_TRANSIT)
 
@@ -160,7 +160,7 @@ final class DeliveryDetailControllerProvider
 }
 
 String _$deliveryDetailControllerHash() =>
-    r'd00746af0de33ed90c7455a0bdda2f6c4fdd80cf';
+    r'0ebebc329617832127b35f720c0acb605f9ba790';
 
 /// Détail d'une livraison spécifique
 

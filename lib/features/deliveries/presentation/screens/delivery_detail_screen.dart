@@ -187,36 +187,10 @@ class _DeliveryDetailBody extends ConsumerWidget {
             const SizedBox(height: 12),
           ],
 
-          // ─── Ce que le LIVREUR touche ────────────────────────────────────
-          //
-          // Cette carte vient AVANT celle du montant client, et c'est
-          // délibéré : l'écran n'affichait que le total de la commande, soit
-          // ~6 750 XAF sur un panier type. Aucun de ces francs n'est le sien —
-          // le gros va au vendeur. Lu sur son propre écran de mission, ce
-          // chiffre se comprend comme sa rémunération.
-          _DriverPayCard(delivery: delivery),
+          // D-PAY (DEL-002) : ni rémunération ni montant de commande sur cet
+          // écran. Le livreur n'encaisse rien (paiement mobile money à la
+          // commande) et sa paie est une donnée du système et de l'admin.
           const SizedBox(height: 12),
-
-          // Montant de la commande — l'argent du client, pas celui du livreur.
-          if (order != null) ...[
-            _InfoCard(
-              title: 'Montant de la commande',
-              icon: Icons.payments_outlined,
-              children: [
-                _InfoRow(label: 'Sous-total', value: '${order.subTotal} XAF'),
-                _InfoRow(
-                  label: 'Frais de livraison',
-                  value: '${order.deliveryFee} XAF',
-                ),
-                _InfoRow(
-                  label: 'Payé par le client',
-                  value: '${order.total} XAF',
-                  bold: true,
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-          ],
 
           // Actions
           if (delivery.status == DeliveryStatus.assigner) ...[
@@ -227,16 +201,33 @@ class _DeliveryDetailBody extends ConsumerWidget {
               child: ElevatedButton.icon(
                 onPressed: (order == null || order.isReadyToPickup)
                     ? () async {
-                        await ref
-                            .read(
-                              deliveryDetailControllerProvider(deliveryId)
-                                  .notifier,
-                            )
-                            .acceptDelivery();
+                        try {
+                          await ref
+                              .read(
+                                deliveryDetailControllerProvider(deliveryId)
+                                    .notifier,
+                              )
+                              .acceptDelivery();
+                        } catch (e) {
+                          // L'écran montre déjà l'état relu au serveur ; on
+                          // dit pourquoi le geste n'a pas abouti.
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Acceptation impossible : $e'),
+                                backgroundColor: AppColors.error,
+                              ),
+                            );
+                          }
+                          return;
+                        }
+                        // Écran quitté pendant la requête : `ref` n'est plus
+                        // utilisable, et il n'y a rien à rafraîchir.
+                        if (!context.mounted) return;
                         ref.invalidate(
                           deliveryDetailControllerProvider(deliveryId),
                         );
-                        if (context.mounted) context.pop();
+                        context.pop();
                       }
                     : null,
                 icon: const Icon(Icons.check),
@@ -330,6 +321,7 @@ class _DeliveryDetailBody extends ConsumerWidget {
                         deliveryDetailControllerProvider(deliveryId).notifier,
                       )
                       .confirmPickup();
+                  if (!context.mounted) return;
                   ref.invalidate(deliveryDetailControllerProvider(deliveryId));
 
                   // La récupération a réussi ; seule la localisation manque.
@@ -1370,8 +1362,7 @@ class _InfoCard extends StatelessWidget {
 class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
-  final bool bold;
-  const _InfoRow({required this.label, required this.value, this.bold = false});
+  const _InfoRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1389,10 +1380,7 @@ class _InfoRow extends StatelessWidget {
         Expanded(
           child: Text(
             value,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-            ),
+            style: const TextStyle(fontSize: 13),
           ),
         ),
       ],
@@ -1646,69 +1634,4 @@ class _NavigateButton extends StatelessWidget {
       ),
     ),
   );
-}
-
-/// Ce que le livreur touche pour CETTE course.
-///
-/// ## Pourquoi ce widget existe
-///
-/// L'application ne montrait au livreur que le total de la commande. Sur un
-/// panier type, il lisait « 6 750 XAF » — dont 5 000 pour le vendeur et 750 de
-/// frais de service. Aucun écran ne disait ce qu'il gagnait, parce que le
-/// système ne le savait pas.
-///
-/// ## Les trois états, et pourquoi ils sont distincts
-///
-/// · **montant connu** → on l'affiche, avec son taux ;
-/// · **au salaire** → 0 par course est la bonne réponse, mais un « 0 XAF » sec
-///   se lirait comme une erreur : on l'explique ;
-/// · **inconnu** (`null`) → tiret et explication. ⚠️ Jamais `0` : les courses
-///   antérieures au 18/09/2026 n'ont aucune économie, et afficher zéro dirait
-///   au livreur qu'il n'a rien gagné.
-class _DriverPayCard extends StatelessWidget {
-  const _DriverPayCard({required this.delivery});
-
-  final Delivery delivery;
-
-  @override
-  Widget build(BuildContext context) {
-    final pay = delivery.driverPayXaf;
-    final salaried = delivery.driverCompensationModel == 'SALARY';
-    final share = delivery.driverSharePercent;
-
-    final String value;
-    final String? note;
-    if (pay == null) {
-      value = '—';
-      note = 'Rémunération non enregistrée pour cette course.';
-    } else if (salaried) {
-      value = '0 XAF';
-      note = 'Vous êtes rémunéré au salaire, pas à la course.';
-    } else {
-      value = '$pay XAF';
-      note = share != null
-          ? 'Votre part : ${share.toStringAsFixed(share % 1 == 0 ? 0 : 2)} % '
-                'des frais de livraison.'
-          : null;
-    }
-
-    return _InfoCard(
-      title: 'Votre rémunération',
-      icon: Icons.account_balance_wallet_outlined,
-      children: [
-        _InfoRow(label: 'Pour cette course', value: value, bold: true),
-        if (note != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text(
-              note,
-              style: TextStyle(
-                fontSize: 12,
-                color: pay == null ? Colors.orange.shade800 : Colors.grey,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
 }

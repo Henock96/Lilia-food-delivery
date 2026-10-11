@@ -2,8 +2,18 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 
 /// Rejoue les requêtes échouées sur 5xx / timeout / erreur réseau, avec
-/// backoff exponentiel + jitter. Ne rejoue JAMAIS les 4xx. Les POST ne sont
-/// rejoués que s'ils portent un header `Idempotency-Key` (checkout).
+/// backoff exponentiel + jitter. Ne rejoue JAMAIS les 4xx.
+///
+/// Seules les méthodes idempotentes par nature (GET, PUT, DELETE) sont
+/// rejouées, plus toute requête portant un header `Idempotency-Key`.
+///
+/// ⚠️ `PATCH` n'est plus rejoué (DEL-003, octobre 2026). Toutes les mutations
+/// de course de cette app sont des `PATCH` (accept, pickup, status) et le
+/// backend ne leur offre pas de clé d'idempotence. Quand la réponse se
+/// perdait après le commit, le rejeu tombait sur le verrou optimiste et
+/// l'app affichait une erreur sur une livraison réussie. C'est désormais le
+/// contrôleur qui relit `GET /deliveries/:id` après un échec et conclut
+/// d'après l'état réel — l'idempotence n'est jamais simulée côté client.
 class RetryInterceptor extends Interceptor {
   final Dio dio;
   final int maxRetries;
@@ -47,10 +57,8 @@ class RetryInterceptor extends Interceptor {
 
   bool _shouldRetry(DioException err) {
     final method = err.requestOptions.method.toUpperCase();
-    final isIdempotent = method == 'GET' ||
-        method == 'PUT' ||
-        method == 'PATCH' ||
-        method == 'DELETE';
+    final isIdempotent =
+        method == 'GET' || method == 'PUT' || method == 'DELETE';
     final hasIdempotencyKey =
         err.requestOptions.headers.containsKey('Idempotency-Key');
     if (!isIdempotent && !hasIdempotencyKey) return false;

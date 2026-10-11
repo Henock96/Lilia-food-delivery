@@ -75,4 +75,26 @@ void main() {
     );
     expect(adapter.calls, 3); // initial + 2 retries (maxRetries=2)
   });
+
+  // DEL-003 — toutes les mutations de course sont des PATCH sans clé
+  // d'idempotence côté backend : un rejeu après un commit dont la réponse
+  // s'est perdue tombait sur le verrou optimiste et affichait une erreur sur
+  // une livraison réussie. Le contrôleur relit l'état réel à la place.
+  test('PATCH non rejoué sur 503 (mutation de course)', () async {
+    final adapter = _CountingAdapter((_) => 503);
+    final dio = _dioWith(adapter);
+    await expectLater(
+      dio.patch('/deliveries/d1/status', data: {'status': 'LIVRER'}),
+      throwsA(isA<DioException>()),
+    );
+    expect(adapter.calls, 1);
+  });
+
+  test('GET toujours rejoué : la relecture de l’état reste robuste', () async {
+    final adapter = _CountingAdapter((c) => c < 2 ? 503 : 200);
+    final dio = _dioWith(adapter);
+    final res = await dio.get('/deliveries/d1');
+    expect(res.statusCode, 200);
+    expect(adapter.calls, 3);
+  });
 }
