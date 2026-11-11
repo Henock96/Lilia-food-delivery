@@ -6,7 +6,12 @@
 enum NotificationTrigger { foreground, tap }
 
 /// Ce qu'il faut rafraîchir à réception.
-enum NotificationTarget { missions }
+enum NotificationTarget {
+  missions,
+
+  /// Dispatch FCFS : la liste des commandes disponibles.
+  available,
+}
 
 /// Ce que l'app doit faire en réponse à un message FCM.
 class NotificationAction {
@@ -67,11 +72,32 @@ class NotificationRouter {
     'delivery_cancelled',
   };
 
+  /// Dispatch FCFS (10/11/2026). ⚠️ Ces pushs portent `openDeliveryId`,
+  /// jamais `deliveryId` : la course n'est pas celle du livreur, et le repli
+  /// « tout `deliveryId` ouvre `/deliveries/:id` » lui vaudrait un 403.
+  /// Un tap mène à l'onglet Disponibles ; jamais à une mission.
+  static const _offerType = 'delivery_offer';
+
+  /// Data seule : la course vient d'être prise (ou retirée). On retire la
+  /// carte, sans naviguer nulle part.
+  static const _offerTakenType = 'delivery_offer_taken';
+
   NotificationAction resolve(
     Map<String, dynamic> data, {
     required NotificationTrigger trigger,
   }) {
     final type = data['type'] as String?;
+
+    if (type == _offerType) {
+      return NotificationAction(
+        refresh: NotificationTarget.available,
+        route: trigger == NotificationTrigger.tap ? '/available' : null,
+      );
+    }
+    if (type == _offerTakenType) {
+      return const NotificationAction(refresh: NotificationTarget.available);
+    }
+
     final deliveryId = data['deliveryId'] as String?;
     final hasDeliveryId = deliveryId != null && deliveryId.isNotEmpty;
 

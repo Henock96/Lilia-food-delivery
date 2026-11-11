@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'common_widgets/app_cached_image.dart';
 import 'features/deliveries/application/connectivity_watcher.dart';
+import 'features/deliveries/application/dispatch_capability.dart';
 import 'features/deliveries/application/missions_sync.dart';
 import 'features/deliveries/application/tracking_resume_service.dart';
 import 'routing/app_router.dart';
@@ -47,7 +48,11 @@ class _LiliaDeliveryAppState extends ConsumerState<LiliaDeliveryApp> {
         ref.read(connectivityWatcherProvider).start();
         // DEL-005 : les missions ne dépendent plus seulement du push.
         ref.read(missionsSyncProvider).start();
+        // FCFS : cette version sait recevoir des propositions de course.
+        // Silencieux ; sans cet appel le serveur ne propose rien.
+        ref.read(dispatchCapabilityProvider).declare(force: true);
       } else {
+        ref.read(dispatchCapabilityProvider).reset();
         ref.read(deliveryNotificationServiceProvider).removeToken();
         ref.read(trackingResumeServiceProvider).stop();
         ref.read(connectivityWatcherProvider).stop();
