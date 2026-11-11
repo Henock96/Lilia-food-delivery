@@ -5,6 +5,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../features/auth/application/auth_controller.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/presentation/screens/sign_in_screen.dart';
+import '../features/deliveries/presentation/screens/available_screen.dart';
 import '../features/deliveries/presentation/screens/delivery_detail_screen.dart'
     show DeliveryDetailScreen, FullscreenDriverMapScreen;
 import '../features/deliveries/presentation/screens/history_screen.dart';
@@ -33,6 +34,17 @@ GoRouter appRouter(Ref ref) {
         builder: (context, state, shell) =>
             _RoleGuard(child: _MainScaffold(shell: shell)),
         branches: [
+          // Dispatch FCFS — les commandes prêtes à prendre, distinctes des
+          // missions déjà à lui. `/` reste Missions : les pushs historiques
+          // et le redirect de connexion y mènent.
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/available',
+                builder: (_, _) => const AvailableScreen(),
+              ),
+            ],
+          ),
           StatefulShellBranch(
             routes: [
               GoRoute(path: '/', builder: (_, _) => const MissionsScreen()),
@@ -145,6 +157,10 @@ class _MainScaffold extends StatelessWidget {
       selectedIndex: shell.currentIndex,
       onDestinationSelected: shell.goBranch,
       destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.campaign_outlined),
+          label: 'Disponibles',
+        ),
         NavigationDestination(
           icon: Icon(Icons.delivery_dining),
           label: 'Missions',

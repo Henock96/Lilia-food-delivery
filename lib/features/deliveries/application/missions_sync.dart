@@ -5,7 +5,9 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../models/app_user.dart';
 import '../../profile/application/profile_controller.dart';
+import 'available_deliveries_controller.dart';
 import 'deliveries_controller.dart';
+import 'dispatch_capability.dart';
 
 part 'missions_sync.g.dart';
 
@@ -126,9 +128,21 @@ class MissionsSync with WidgetsBindingObserver {
 MissionsSync missionsSync(Ref ref) {
   final sync = MissionsSync(
     refresh: () async {
-      await ref.read(missionsControllerProvider.notifier).syncSilently();
+      // FCFS — les commandes disponibles suivent le même rythme que les
+      // missions : un push perdu ne cache pas une course à prendre.
+      await Future.wait([
+        ref.read(missionsControllerProvider.notifier).syncSilently(),
+        ref
+            .read(availableDeliveriesControllerProvider.notifier)
+            .syncSilently(),
+      ]);
     },
-    refreshProfile: () => ref.invalidate(profileControllerProvider),
+    refreshProfile: () {
+      ref.invalidate(profileControllerProvider);
+      // Retour au premier plan = signe de vie : la capacité est renouvelée
+      // (cadencée à 30 min par le déclarant lui-même).
+      unawaited(ref.read(dispatchCapabilityProvider).declare());
+    },
     driverStatus: () => ref.read(profileControllerProvider).value?.driverStatus,
   );
   // Disponible ↔ en course ↔ hors ligne : le minuteur suit.

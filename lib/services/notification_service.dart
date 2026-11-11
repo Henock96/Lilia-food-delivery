@@ -8,6 +8,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../core/network/api_client.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../features/deliveries/application/available_deliveries_controller.dart';
 import '../features/deliveries/application/deliveries_controller.dart';
 import '../routing/app_router.dart';
 import 'fcm_token_registrar.dart';
@@ -190,6 +191,12 @@ class DeliveryNotificationService {
     switch (action.refresh) {
       case NotificationTarget.missions:
         _ref.read(missionsControllerProvider.notifier).refresh();
+      case NotificationTarget.available:
+        // FCFS — relecture de fond : la liste affichée ne clignote pas, et
+        // une course prise disparaît d'elle-même. Le serveur est la vérité.
+        _ref
+            .read(availableDeliveriesControllerProvider.notifier)
+            .syncSilently();
       case null:
         break;
     }
@@ -197,10 +204,17 @@ class DeliveryNotificationService {
     final route = action.route;
     if (route == null) return;
 
-    // `push` empile par dessus l'écran courant : le livreur peut revenir à ce
-    // qu'il faisait.
     try {
-      _ref.read(appRouterProvider).push(route);
+      final router = _ref.read(appRouterProvider);
+      // L'onglet Disponibles est une branche du shell : `go`, pas `push`
+      // (un onglet empilé par-dessus lui-même casserait le retour).
+      if (route == '/available') {
+        router.go(route);
+        return;
+      }
+      // `push` empile par dessus l'écran courant : le livreur peut revenir à
+      // ce qu'il faisait.
+      router.push(route);
     } catch (e) {
       debugPrint('Erreur navigation notification ($route): $e');
     }
