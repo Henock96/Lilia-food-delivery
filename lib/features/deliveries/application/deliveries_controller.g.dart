@@ -160,7 +160,7 @@ final class DeliveryDetailControllerProvider
 }
 
 String _$deliveryDetailControllerHash() =>
-    r'0ebebc329617832127b35f720c0acb605f9ba790';
+    r'54d81e1e2f51d8ba9e1bd2a4f663f617978ebe1a';
 
 /// Détail d'une livraison spécifique
 

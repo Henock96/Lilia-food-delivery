@@ -352,6 +352,39 @@ class _DeliveryDetailBody extends ConsumerWidget {
                 backgroundColor: AppColors.success,
               ),
             ),
+            const SizedBox(height: 8),
+            // FCFS — rendre une course acceptée AVANT de l'avoir récupérée :
+            // elle est de nouveau proposée aux livreurs. Après la
+            // récupération, le chemin reste « Problème » (échec, F3-05).
+            if (delivery.pickedUpAt == null)
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final reason = await _askAbandonReason(context);
+                  if (reason == null || !context.mounted) return;
+                  try {
+                    await ref
+                        .read(
+                          deliveryDetailControllerProvider(deliveryId).notifier,
+                        )
+                        .abandonDelivery(reason: reason);
+                    if (context.mounted) context.pop();
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Désistement impossible : $e'),
+                          backgroundColor: AppColors.error,
+                        ),
+                      );
+                    }
+                  }
+                },
+                icon: const Icon(Icons.undo),
+                label: const Text('Je ne peux plus effectuer cette livraison'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                ),
+              ),
           ],
           if (delivery.status == DeliveryStatus.en_transit) ...[
             ElevatedButton.icon(
@@ -783,6 +816,52 @@ class _LiveBadge extends StatelessWidget {
 }
 
 /// Écran plein écran pour la carte livreur
+/// Motif de désistement (FCFS) — obligatoire : le vendeur et
+/// l'administration le lisent. `null` = annulé.
+Future<String?> _askAbandonReason(BuildContext context) async {
+  final controller = TextEditingController();
+  final reason = await showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Rendre cette livraison ?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Elle sera proposée aux autres livreurs. Indiquez la raison.',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 300,
+            decoration: const InputDecoration(
+              hintText: 'Ex. : panne, urgence…',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => ctx.pop(), child: const Text('Annuler')),
+        TextButton(
+          onPressed: () {
+            final reason = controller.text.trim();
+            if (reason.length < 3) return;
+            ctx.pop(reason);
+          },
+          child: const Text(
+            'Rendre la livraison',
+            style: TextStyle(color: AppColors.error),
+          ),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  return reason;
+}
+
 class FullscreenDriverMapScreen extends ConsumerStatefulWidget {
   final String deliveryId;
   const FullscreenDriverMapScreen({super.key, required this.deliveryId});

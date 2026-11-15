@@ -99,6 +99,43 @@ void main() {
     });
   });
 
+  group('dispatch FCFS — propositions de course', () {
+    // Le backend n'envoie PAS `deliveryId` sur ces pushs : la course n'est
+    // pas celle du livreur, et le repli « deliveryId ⇒ /deliveries/:id »
+    // lui vaudrait un 403. Il envoie `openDeliveryId`.
+    test('delivery_offer : tap ⇒ onglet Disponibles, jamais une mission', () {
+      final action = onTap({'type': 'delivery_offer', 'openDeliveryId': 'd-9'});
+
+      expect(action.refresh, NotificationTarget.available);
+      expect(action.route, '/available');
+    });
+
+    test('delivery_offer en foreground : rafraîchit sans déplacer', () {
+      final action = inForeground({
+        'type': 'delivery_offer',
+        'openDeliveryId': 'd-9',
+      });
+
+      expect(action.refresh, NotificationTarget.available);
+      expect(action.route, isNull);
+    });
+
+    test('delivery_offer_taken : retire la carte, n’ouvre rien, même au tap', () {
+      final action = onTap({
+        'type': 'delivery_offer_taken',
+        'openDeliveryId': 'd-9',
+        'reason': 'ASSIGNED',
+      });
+
+      expect(action.refresh, NotificationTarget.available);
+      expect(action.route, isNull);
+    });
+
+    test('openDeliveryId seul (sans type) ne déclenche rien', () {
+      expect(onTap({'openDeliveryId': 'd-9'}), NotificationAction.none);
+    });
+  });
+
   group('messages non reconnus', () {
     test('un payload vide ne déclenche rien', () {
       expect(inForeground({}), NotificationAction.none);

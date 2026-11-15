@@ -179,6 +179,38 @@ class DeliveryDetailController extends _$DeliveryDetailController {
     }
   }
 
+  /// FCFS — « Je ne peux plus effectuer cette livraison » : rendre une course
+  /// ACCEPTÉE avant de l'avoir récupérée. Le serveur la remet en recherche
+  /// et libère le livreur. Même signature que le refus : réussi, la course
+  /// n'est plus la sienne (relecture 403/404 = acquis).
+  Future<void> abandonDelivery({required String reason}) =>
+      _once('abandon', () async {
+        final previous = state;
+        state = const AsyncValue.loading();
+        final repo = ref.read(deliveryRepositoryProvider);
+        try {
+          await repo.abandonDelivery(deliveryId, reason: reason);
+        } catch (e, st) {
+          try {
+            // Relue avec succès = toujours la sienne (sinon 403) : le
+            // désistement n'a PAS eu lieu, quel que soit son statut.
+            state = AsyncValue.data(await repo.getDelivery(deliveryId));
+          } on ApiException catch (read) {
+            if (read.statusCode == 403 || read.statusCode == 404) {
+              ref.read(missionsControllerProvider.notifier).refresh();
+              _driverStatusMoved(ref);
+              return;
+            }
+            state = previous;
+          } catch (_) {
+            state = previous;
+          }
+          Error.throwWithStackTrace(e, st);
+        }
+        ref.read(missionsControllerProvider.notifier).refresh();
+        _driverStatusMoved(ref);
+      });
+
   /// Refuse la mission : elle redevient assignable pour le vendeur.
   ///
   /// Comme les autres gestes (DEL-003), un échec est tranché par une

@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../models/delivery.dart';
+import '../../../models/delivery_offer.dart';
 import '../../../models/app_user.dart';
 
 part 'delivery_repository.g.dart';
@@ -110,6 +111,42 @@ class DeliveryRepository {
         if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
       },
     );
+  }
+
+  // ─── Dispatch FCFS — premier arrivé, premier servi (10/11/2026) ──────────
+
+  /// GET /deliveries/available — commandes prêtes que CE livreur peut
+  /// accepter, de la plus ancienne à la plus récente. Projection d'offre :
+  /// ni client, ni adresse, ni montant (voir `DeliveryOffer`).
+  Future<AvailableDeliveries> getAvailableDeliveries() async {
+    final res = await _api.getJson('/deliveries/available');
+    return AvailableDeliveries.fromJson(_asObject(res.data));
+  }
+
+  /// POST /deliveries/:id/claim — « ACCEPTER LA LIVRAISON ».
+  ///
+  /// Le premier claim validé par le serveur gagne ; les autres reçoivent
+  /// `409 DELIVERY_ALREADY_TAKEN`. La commande reste PRÊTE : accepter n'est
+  /// pas récupérer, le tracking ne démarre pas ici.
+  Future<Delivery> claimDelivery(String id) async {
+    final res = await _api.postJson('/deliveries/$id/claim');
+    return _toDelivery(res.data);
+  }
+
+  /// POST /deliveries/:id/abandon — « Je ne peux plus effectuer cette
+  /// livraison », avant la récupération seulement ; motif obligatoire. La
+  /// course est de nouveau proposée aux livreurs.
+  Future<void> abandonDelivery(String id, {required String reason}) async {
+    await _api.postJson(
+      '/deliveries/$id/abandon',
+      body: {'reason': reason.trim()},
+    );
+  }
+
+  /// PUT /drivers/me/dispatch-capability — cette version de l'app sait
+  /// recevoir des propositions. Sans cet appel, le serveur ne propose rien.
+  Future<void> declareDispatchCapability() async {
+    await _api.putJson('/drivers/me/dispatch-capability');
   }
 
   /// PATCH /deliveries/:id/pickup — confirmer la récupération du repas
