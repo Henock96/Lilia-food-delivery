@@ -2,9 +2,9 @@
 //
 // Sans réglage, Android sauvegarde les données de l'application dans le cloud
 // et les recopie lors d'un transfert vers un nouveau téléphone : session
-// Firebase et file des positions GPS en attente partaient
-// avec. Un manifeste qu'aucun test ne lit est un manifeste qui dérive (même
-// motif que `ios_release_config_test.dart`).
+// Firebase et file des positions GPS en attente partaient avec. Un manifeste
+// qu'aucun test ne lit est un manifeste qui dérive (même motif que
+// `test/config/release_config_test.dart`). Copie du test de `lilia-app`.
 
 import 'dart:io';
 
