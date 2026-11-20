@@ -500,3 +500,10 @@ expirent au bout de 5 minutes. 1 écriture HTTP sur 3 publications.
 prenait le relais toutes les 5 s — panne invisible, au prix de la batterie et
 des requêtes. Le correctif existait côté app cliente depuis août (C3) sans avoir
 été porté ici. `firebaseIdTokenProvider` (nouveau) déclenche la reconnexion.
+
+⚠️ Ce relais ne marchait pas (audit du 18/11) : il ne reconnectait qu'une socket
+**encore connectée**, alors qu'à l'expiration la gateway l'a déjà coupée
+(`io server disconnect`, que Socket.io ne relance pas). Depuis le 20/11 :
+`setAuthFn` relit `getIdToken()` à **chaque** tentative de connexion, et
+`emitPosition` relance une socket tombée au plus une fois toutes les 30 s.
+Le relais `firebaseIdTokenProvider` est retiré du provider.
