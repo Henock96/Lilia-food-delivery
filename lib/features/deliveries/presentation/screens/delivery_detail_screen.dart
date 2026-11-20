@@ -527,7 +527,7 @@ class _DriverMapCardState extends ConsumerState<_DriverMapCard> {
     if (!mounted) return;
     final p = _gps.position;
     setState(() {
-      if (p != null) _livePosition = LatLng(p.latitude, p.longitude);
+      _livePosition = p == null ? null : LatLng(p.latitude, p.longitude);
     });
     // Le GPS continue de tourner dans les deux modes ; seule la caméra
     // change de comportement. En EXPLORING on ne la touche pas.
@@ -931,7 +931,7 @@ class _FullscreenDriverMapScreenState
     if (!mounted) return;
     final p = _gps.position;
     setState(() {
-      if (p != null) _livePosition = LatLng(p.latitude, p.longitude);
+      _livePosition = p == null ? null : LatLng(p.latitude, p.longitude);
     });
     if (_gps.state == MapGpsState.live &&
         _livePosition != null &&

@@ -239,6 +239,9 @@ class DriverGpsWatcher {
   void _set(MapGpsState state) {
     if (_disposed || _state == state) return;
     _state = state;
+    // Revue ECC : le dernier point restait affiché comme « Position actuelle »
+    // sous un bandeau annonçant le GPS coupé.
+    if (state.recoverable) _position = null;
     _onChanged();
   }
 }

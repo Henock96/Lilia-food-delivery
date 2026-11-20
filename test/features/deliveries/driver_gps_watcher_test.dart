@@ -161,6 +161,22 @@ void main() {
     expect(gps.positions.hasListener, isFalse);
   });
 
+  test('GPS coupé en cours de course : le dernier point est oublié', () async {
+    final w = gps.watcher();
+    await w.start();
+    gps.positions.add(_point(-4.26, 15.28));
+    await _laisserPasser();
+    expect(w.position, isNotNull);
+
+    gps.service.add(ServiceStatus.disabled);
+    await _laisserPasser();
+
+    expect(w.state, MapGpsState.serviceDisabled);
+    expect(w.position, isNull, reason: 'plus de « Position actuelle » figée');
+    expect(gps.positions.hasListener, isFalse);
+    w.dispose();
+  });
+
   test('dispose libère le flux et fait taire les rappels', () async {
     final w = gps.watcher();
     await w.start();
