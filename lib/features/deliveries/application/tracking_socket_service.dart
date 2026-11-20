@@ -163,12 +163,30 @@ class TrackingSocketService {
     _socket?.dispose();
     _socket = null;
   }
+
+  String? _sessionUid;
+
+  /// Une socket appartient à la session qui l'a ouverte : la gateway fixe
+  /// l'uid à la poignée de main. Déconnexion, ou autre livreur connecté sur le
+  /// même téléphone sans relancer l'app : on ferme, la prochaine position en
+  /// rouvrira une au nom du bon compte.
+  void onSessionChanged(String? uid) {
+    if (uid == _sessionUid) return;
+    _sessionUid = uid;
+    _derniereTentative = null;
+    disconnect();
+  }
 }
 
 @Riverpod(keepAlive: true)
 TrackingSocketService trackingSocketService(Ref ref) {
   final auth = ref.watch(authRepositoryProvider);
   final service = TrackingSocketService(auth);
+  ref.listen(
+    authStateChangeProvider,
+    (_, next) => service.onSessionChanged(next.value?.uid),
+    fireImmediately: true,
+  );
   ref.onDispose(() => service.disconnect());
   return service;
 }

@@ -168,6 +168,38 @@ void main() {
     expect(sockets, hasLength(2));
   });
 
+  // Revue ECC : la gateway fixe l'uid à la poignée de main. Un autre livreur
+  // connecté sur le même téléphone publiait sous l'uid du précédent — refusé
+  // par la gateway, alors que `emitPosition` rendait `true`.
+  test('un autre compte ferme la socket ; la même session la garde', () async {
+    final service = monter();
+    service.onSessionChanged('livreur-a');
+    await service.connect();
+    sockets.single.connecte = true;
+
+    service.onSessionChanged('livreur-a');
+    expect(sockets.single.disposes, 0, reason: 'même session');
+
+    service.onSessionChanged('livreur-b');
+    expect(sockets.single.disposes, 1);
+    expect(service.isConnected, isFalse);
+
+    // La position suivante rouvre aussitôt, sans attendre le délai de relance.
+    expect(emettre(service), isFalse);
+    await Future<void>.delayed(Duration.zero);
+    expect(sockets, hasLength(2));
+  });
+
+  test('déconnexion : la socket est fermée', () async {
+    final service = monter();
+    service.onSessionChanged('livreur-a');
+    await service.connect();
+
+    service.onSessionChanged(null);
+
+    expect(sockets.single.disposes, 1);
+  });
+
   test('socket connectée : la position part en WebSocket', () async {
     final service = monter();
     await service.connect();
