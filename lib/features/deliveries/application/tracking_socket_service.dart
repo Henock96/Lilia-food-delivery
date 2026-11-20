@@ -9,6 +9,16 @@ import '../../auth/data/auth_repository.dart';
 
 part 'tracking_socket_service.g.dart';
 
+/// Fabrique la connexion. Point d'injection pour les tests, qui n'ouvrent
+/// aucun vrai socket.
+typedef SocketFactory = io.Socket Function(
+  String url,
+  Map<String, dynamic> options,
+);
+
+io.Socket _socketReel(String url, Map<String, dynamic> options) =>
+    io.io(url, options);
+
 /// Service Socket.io pour pousser la position du livreur en temps réel
 /// vers le namespace `/tracking` du backend.
 ///
@@ -18,12 +28,34 @@ part 'tracking_socket_service.g.dart';
 ///
 /// Fallback : si la connexion WS échoue, le caller peut utiliser
 /// `DeliveryRepository.updateLocation` (HTTP PATCH) à la place.
+///
+/// **Jeton.** Il est relu auprès de Firebase à **chaque** tentative de
+/// connexion (`setAuthFn`), et non capturé une fois à l'ouverture. Le jeton
+/// figé expirait au bout d'une heure : la gateway coupait la socket à la
+/// première émission (`io server disconnect`, que Socket.io ne relance pas),
+/// et le relais par `firebaseIdTokenProvider` n'agissait que si la socket
+/// était **encore** connectée — jamais, donc. Le suivi restait sur le repli
+/// HTTP jusqu'à la fin de la course. `getIdToken()` rend le jeton en cache
+/// s'il est valide et le renouvelle sinon : pas de second système de jetons.
 class TrackingSocketService {
   final AuthRepository _auth;
+  final SocketFactory _fabrique;
+  final DateTime Function() _maintenant;
   io.Socket? _socket;
   bool _isConnecting = false;
+  DateTime? _derniereTentative;
 
-  TrackingSocketService(this._auth);
+  /// Écart minimal entre deux reconnexions déclenchées par [emitPosition].
+  /// Une émission a lieu toutes les 5 s : sans ce plafond, un serveur qui
+  /// refuse (compte suspendu) provoquerait une connexion par position.
+  static const delaiEntreRelances = Duration(seconds: 30);
+
+  TrackingSocketService(
+    this._auth, {
+    SocketFactory? fabrique,
+    DateTime Function()? maintenant,
+  })  : _fabrique = fabrique ?? _socketReel,
+        _maintenant = maintenant ?? DateTime.now;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -32,6 +64,7 @@ class TrackingSocketService {
   Future<void> connect() async {
     if (isConnected || _isConnecting) return;
     _isConnecting = true;
+    _derniereTentative = _maintenant();
 
     try {
       final token = await _auth.getIdToken();
@@ -43,11 +76,11 @@ class TrackingSocketService {
       // Disconnect any stale socket
       _socket?.dispose();
 
-      _socket = io.io(
+      _socket = _fabrique(
         '${AppConstants.wsUrl}${AppConstants.trackingNamespace}',
         io.OptionBuilder()
             .setTransports(['websocket', 'polling'])
-            .setAuth({'token': token})
+            .setAuthFn(_jetonFrais)
             .enableReconnection()
             .setReconnectionAttempts(10)
             .setReconnectionDelay(2000)
@@ -70,8 +103,26 @@ class TrackingSocketService {
     }
   }
 
+  /// Appelé par Socket.io à chaque ouverture du transport, reconnexions
+  /// automatiques comprises. Le rappel doit toujours être servi, sans quoi la
+  /// poignée de main reste suspendue : un jeton vide fait refuser la
+  /// connexion par la gateway, ce qui laisse la main au repli HTTP.
+  void _jetonFrais(void Function(Map<dynamic, dynamic> auth) rappel) {
+    _auth.getIdToken().then(
+          (token) => rappel({'token': token ?? ''}),
+          onError: (Object e) {
+            debugPrint('[Tracking WS] jeton indisponible : $e');
+            rappel({'token': ''});
+          },
+        );
+  }
+
   /// Pousse la position du livreur. Échec silencieux si pas connecté
   /// (le caller utilise HTTP fallback).
+  ///
+  /// Socket tombée (coupure serveur, dix tentatives épuisées) : une nouvelle
+  /// connexion est relancée en arrière-plan, au plus une fois par
+  /// [delaiEntreRelances]. Cette position-ci part en HTTP.
   bool emitPosition({
     required String orderId,
     required double lat,
@@ -79,7 +130,10 @@ class TrackingSocketService {
     double? accuracy,
   }) {
     final socket = _socket;
-    if (socket == null || !socket.connected) return false;
+    if (socket == null || !socket.connected) {
+      _relancerSiPossible();
+      return false;
+    }
     socket.emit('driver:position', {
       'orderId': orderId,
       'lat': lat,
@@ -89,7 +143,16 @@ class TrackingSocketService {
     return true;
   }
 
-  /// Reconnecte avec un token frais — appelé après refresh Firebase token.
+  void _relancerSiPossible() {
+    final derniere = _derniereTentative;
+    if (derniere != null &&
+        _maintenant().difference(derniere) < delaiEntreRelances) {
+      return;
+    }
+    unawaited(connect());
+  }
+
+  /// Reconnecte avec un token frais.
   Future<void> reconnect() async {
     _socket?.dispose();
     _socket = null;
@@ -106,24 +169,6 @@ class TrackingSocketService {
 TrackingSocketService trackingSocketService(Ref ref) {
   final auth = ref.watch(authRepositoryProvider);
   final service = TrackingSocketService(auth);
-
-  // Le token Firebase est capturé **une seule fois**, à l'ouverture du socket,
-  // et Socket.io rejoue ce même token à chaque reconnexion automatique. Au
-  // bout d'une heure il expire : la gateway déconnecte à chaque émission, la
-  // reconnexion repasse le token périmé, et le suivi WebSocket tombe en
-  // boucle. Le repli HTTP prenait le relais — donc la panne était invisible,
-  // au prix d'une requête toutes les 5 s.
-  //
-  // Le correctif existait côté app cliente depuis l'audit d'août (C3) mais
-  // n'avait pas été porté ici. On reconnecte dès que Firebase renouvelle le
-  // token, et seulement si une course est en cours.
-  ref.listen(firebaseIdTokenProvider, (previous, next) {
-    final token = next.value;
-    if (token != null && service.isConnected) {
-      unawaited(service.reconnect());
-    }
-  });
-
   ref.onDispose(() => service.disconnect());
   return service;
 }
