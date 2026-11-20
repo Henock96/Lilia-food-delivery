@@ -24,10 +24,17 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
     <!-- Android 14+ : refuse de démarrer un service `location` sans ce type. -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Aucune donnée de l'app ne part en sauvegarde ni en transfert d'appareil
+         (SEC-09, audit du 18/11) : la session Firebase et la file des positions
+         GPS en attente y partaient. `allowBackup` couvre Android 11 et avant ;
+         depuis Android 12, seul `dataExtractionRules` exclut le transfert
+         d'appareil à appareil. Vérifié par `test/platform/android_backup_test.dart`. -->
     <application
         android:label="Lilia Food Delivery"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon">
+        android:icon="@mipmap/launcher_icon"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"
