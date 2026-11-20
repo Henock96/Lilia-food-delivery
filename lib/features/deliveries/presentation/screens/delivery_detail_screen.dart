@@ -1,5 +1,6 @@
 import '../widgets/handover_code_dialog.dart';
 import '../widgets/delivery_issue_sheet.dart';
+import '../widgets/gps_state_views.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../models/delivery.dart';
 import '../../../../utilities/app_theme.dart';
 import '../../application/deliveries_controller.dart';
+import '../../application/driver_gps_watcher.dart';
 import '../../application/location_service.dart';
 
 String _formatHourMinus1h(DateTime scheduledFor) {
@@ -472,7 +474,8 @@ enum _CameraMode {
 
 class _DriverMapCardState extends ConsumerState<_DriverMapCard> {
   GoogleMapController? _mapController;
-  StreamSubscription<Position>? _positionSub;
+  late final DriverGpsWatcher _gps;
+  late final AppLifecycleListener _lifecycle;
   LatLng? _livePosition;
   _CameraMode _cameraMode = _CameraMode.following;
 
@@ -482,63 +485,74 @@ class _DriverMapCardState extends ConsumerState<_DriverMapCard> {
   @override
   void initState() {
     super.initState();
+    _gps = DriverGpsWatcher(distanceFilter: 10, onChanged: _onGpsChanged);
+    // Le livreur revient peut-être des réglages : on réévalue sans attendre
+    // de geste.
+    _lifecycle = AppLifecycleListener(
+      onResume: () {
+        if (_gps.state.recoverable) _gps.start();
+      },
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final svc = ref.read(locationServiceProvider);
-      if (!svc.isTracking) {
-        // `requestPermissionDetailed` et non `requestPermission` : un refus
-        // rendu en simple booléen laissait la carte s'afficher, vide, sans que
-        // le livreur sache que sa position ne partait pas — et le client
-        // voyait un marqueur figé pendant toute la course.
-        final permission = await svc.requestPermissionDetailed();
-        if (permission.granted) {
-          svc.startTracking(
-            deliveryId: widget.deliveryId,
-            orderId: widget.delivery.orderId,
-          );
-        } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(permission.message),
-              backgroundColor: AppColors.warning,
-              duration: const Duration(seconds: 6),
-            ),
-          );
-        }
-      }
-      _startPositionStream();
+      await _ensureTracking();
+      await _gps.start();
     });
   }
 
-  Future<void> _startPositionStream() async {
-    final perm = await Geolocator.checkPermission();
-    if (perm == LocationPermission.denied ||
-        perm == LocationPermission.deniedForever) {
-      return;
+  Future<void> _ensureTracking() async {
+    final svc = ref.read(locationServiceProvider);
+    if (svc.isTracking) return;
+    // `requestPermissionDetailed` et non `requestPermission` : un refus
+    // rendu en simple booléen laissait la carte s'afficher, vide, sans que
+    // le livreur sache que sa position ne partait pas — et le client
+    // voyait un marqueur figé pendant toute la course.
+    final permission = await svc.requestPermissionDetailed();
+    if (permission.granted) {
+      svc.startTracking(
+        deliveryId: widget.deliveryId,
+        orderId: widget.delivery.orderId,
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(permission.message),
+          backgroundColor: AppColors.warning,
+          duration: const Duration(seconds: 6),
+        ),
+      );
     }
-
-    _positionSub =
-        Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10,
-          ),
-        ).listen((pos) {
-          if (!mounted) return;
-          setState(() => _livePosition = LatLng(pos.latitude, pos.longitude));
-          // Le GPS continue de tourner dans les deux modes ; seule la caméra
-          // change de comportement. En EXPLORING on ne la touche pas.
-          if (_cameraMode == _CameraMode.following) {
-            // Le drapeau est indispensable : sans lui, `onCameraMoveStarted`
-            // prend ce recentrage pour un geste du livreur et bascule en
-            // EXPLORING dès le premier point GPS — le suivi automatique ne
-            // fonctionne alors jamais sur cette carte.
-            _selfDrivenCameraMove = true;
-            _mapController?.animateCamera(
-              CameraUpdate.newLatLng(_livePosition!),
-            );
-          }
-        });
   }
+
+  void _onGpsChanged() {
+    if (!mounted) return;
+    final p = _gps.position;
+    setState(() {
+      if (p != null) _livePosition = LatLng(p.latitude, p.longitude);
+    });
+    // Le GPS continue de tourner dans les deux modes ; seule la caméra
+    // change de comportement. En EXPLORING on ne la touche pas.
+    if (_gps.state == MapGpsState.live &&
+        _livePosition != null &&
+        _cameraMode == _CameraMode.following) {
+      // Le drapeau est indispensable : sans lui, `onCameraMoveStarted`
+      // prend ce recentrage pour un geste du livreur et bascule en
+      // EXPLORING dès le premier point GPS — le suivi automatique ne
+      // fonctionne alors jamais sur cette carte.
+      _selfDrivenCameraMove = true;
+      _mapController?.animateCamera(CameraUpdate.newLatLng(_livePosition!));
+    }
+  }
+
+  Future<void> _onGpsAction(MapGpsAction action) => _runGpsAction(
+    action,
+    _gps,
+    // Ici l'autorisation sert aussi la publication au client : on repasse
+    // par le même chemin qu'à l'ouverture.
+    requestPermission: () async {
+      await _ensureTracking();
+      await _gps.start();
+    },
+  );
 
   /// Le livreur a déplacé la carte : on lâche la caméra.
   ///
@@ -602,7 +616,8 @@ class _DriverMapCardState extends ConsumerState<_DriverMapCard> {
 
   @override
   void dispose() {
-    _positionSub?.cancel();
+    _gps.dispose();
+    _lifecycle.dispose();
     _mapController?.dispose();
     super.dispose();
   }
@@ -627,17 +642,20 @@ class _DriverMapCardState extends ConsumerState<_DriverMapCard> {
     return null;
   }
 
-  Set<Marker> _buildMarkers(LatLng driverPos) {
+  Set<Marker> _buildMarkers(LatLng? driverPos) {
     final markers = <Marker>{
-      Marker(
-        markerId: const MarkerId('driver'),
-        position: driverPos,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-        infoWindow: const InfoWindow(
-          title: 'Vous',
-          snippet: 'Position actuelle',
+      if (driverPos != null)
+        Marker(
+          markerId: const MarkerId('driver'),
+          position: driverPos,
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            BitmapDescriptor.hueOrange,
+          ),
+          infoWindow: const InfoWindow(
+            title: 'Vous',
+            snippet: 'Position actuelle',
+          ),
         ),
-      ),
     };
     final client = _clientPos;
     if (client != null) {
@@ -656,9 +674,9 @@ class _DriverMapCardState extends ConsumerState<_DriverMapCard> {
     return markers;
   }
 
-  Set<Polyline> _buildPolylines(LatLng driverPos) {
+  Set<Polyline> _buildPolylines(LatLng? driverPos) {
     final client = _clientPos;
-    if (client == null) return {};
+    if (client == null || driverPos == null) return {};
     return {
       Polyline(
         polylineId: const PolylineId('route'),
@@ -673,6 +691,9 @@ class _DriverMapCardState extends ConsumerState<_DriverMapCard> {
   @override
   Widget build(BuildContext context) {
     final pos = _effectivePosition;
+    // Sans position du livreur, la carte se cadre sur la destination plutôt
+    // que de disparaître derrière un message (audit du 18/11, L-4).
+    final target = pos ?? _clientPos;
     final dest = widget.delivery.order?.adresse?.formatted;
 
     return Card(
@@ -713,16 +734,17 @@ class _DriverMapCardState extends ConsumerState<_DriverMapCard> {
           ),
           SizedBox(
             height: 320,
-            child: pos != null
+            child: target != null
                 ? Stack(
                     children: [
                       GoogleMap(
                         initialCameraPosition: CameraPosition(
-                          target: pos,
+                          target: target,
                           zoom: 14,
                         ),
                         onMapCreated: (c) {
                           _mapController = c;
+                          if (pos == null) return;
                           Future.delayed(
                             const Duration(milliseconds: 300),
                             () => _fitBoth(pos),
@@ -740,15 +762,28 @@ class _DriverMapCardState extends ConsumerState<_DriverMapCard> {
                         zoomControlsEnabled: true,
                         mapToolbarEnabled: false,
                       ),
-                      if (_cameraMode == _CameraMode.exploring)
+                      if (_cameraMode == _CameraMode.exploring && pos != null)
                         Positioned(
                           right: 12,
                           bottom: 12,
                           child: _RecenterButton(onPressed: _recenter),
                         ),
+                      if (_gps.state != MapGpsState.live)
+                        Positioned(
+                          left: 8,
+                          right: 8,
+                          top: 8,
+                          child: GpsStatusStrip(
+                            state: _gps.state,
+                            onAction: _onGpsAction,
+                          ),
+                        ),
                     ],
                   )
-                : const _NoGpsPlaceholder(),
+                : GpsStatePlaceholder(
+                    state: _gps.state,
+                    onAction: _onGpsAction,
+                  ),
           ),
           _DestinationPanel(order: widget.delivery.order, address: dest),
         ],
@@ -757,27 +792,27 @@ class _DriverMapCardState extends ConsumerState<_DriverMapCard> {
   }
 }
 
-class _NoGpsPlaceholder extends StatelessWidget {
-  const _NoGpsPlaceholder();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    color: const Color(0xFFF5F5F5),
-    child: const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.location_searching, size: 40, color: AppColors.textLight),
-          SizedBox(height: 8),
-          Text(
-            'Acquisition du signal GPS...',
-            style: TextStyle(color: AppColors.textMed, fontSize: 13),
-          ),
-        ],
-      ),
-    ),
-  );
+/// Le geste proposé par une carte de course pour sortir d'un état GPS.
+///
+/// [requestPermission] remplace la demande par défaut quand l'écran doit aussi
+/// relancer la publication de la position (carte encartée).
+Future<void> _runGpsAction(
+  MapGpsAction action,
+  DriverGpsWatcher gps, {
+  Future<void> Function()? requestPermission,
+}) async {
+  switch (action) {
+    case MapGpsAction.openLocationSettings:
+      await Geolocator.openLocationSettings();
+    case MapGpsAction.openAppSettings:
+      await Geolocator.openAppSettings();
+    case MapGpsAction.requestPermission:
+      await (requestPermission?.call() ?? gps.requestPermissionAndStart());
+    case MapGpsAction.retry:
+      await gps.start();
+    case MapGpsAction.none:
+      break;
+  }
 }
 
 class _LiveBadge extends StatelessWidget {
@@ -874,7 +909,8 @@ class FullscreenDriverMapScreen extends ConsumerStatefulWidget {
 class _FullscreenDriverMapScreenState
     extends ConsumerState<FullscreenDriverMapScreen> {
   GoogleMapController? _mapController;
-  StreamSubscription<Position>? _positionSub;
+  late final DriverGpsWatcher _gps;
+  late final AppLifecycleListener _lifecycle;
   LatLng? _livePosition;
   _CameraMode _cameraMode = _CameraMode.following;
   bool _selfDrivenCameraMove = false;
@@ -882,32 +918,27 @@ class _FullscreenDriverMapScreenState
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startPositionStream());
+    _gps = DriverGpsWatcher(distanceFilter: 5, onChanged: _onGpsChanged);
+    _lifecycle = AppLifecycleListener(
+      onResume: () {
+        if (_gps.state.recoverable) _gps.start();
+      },
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _gps.start());
   }
 
-  Future<void> _startPositionStream() async {
-    final perm = await Geolocator.checkPermission();
-    if (perm == LocationPermission.denied ||
-        perm == LocationPermission.deniedForever) {
-      return;
+  void _onGpsChanged() {
+    if (!mounted) return;
+    final p = _gps.position;
+    setState(() {
+      if (p != null) _livePosition = LatLng(p.latitude, p.longitude);
+    });
+    if (_gps.state == MapGpsState.live &&
+        _livePosition != null &&
+        _cameraMode == _CameraMode.following) {
+      _selfDrivenCameraMove = true;
+      _mapController?.animateCamera(CameraUpdate.newLatLng(_livePosition!));
     }
-
-    _positionSub =
-        Geolocator.getPositionStream(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 5,
-          ),
-        ).listen((pos) {
-          if (!mounted) return;
-          setState(() => _livePosition = LatLng(pos.latitude, pos.longitude));
-          if (_cameraMode == _CameraMode.following) {
-            _selfDrivenCameraMove = true;
-            _mapController?.animateCamera(
-              CameraUpdate.newLatLng(_livePosition!),
-            );
-          }
-        });
   }
 
   void _onCameraMoveStarted() {
@@ -930,7 +961,8 @@ class _FullscreenDriverMapScreenState
 
   @override
   void dispose() {
-    _positionSub?.cancel();
+    _gps.dispose();
+    _lifecycle.dispose();
     _mapController?.dispose();
     super.dispose();
   }
@@ -1085,6 +1117,16 @@ class _FullscreenDriverMapScreenState
                   right: 12,
                   top: 100,
                   child: _RecenterButton(onPressed: _recenter),
+                ),
+              if (_gps.state != MapGpsState.live)
+                Positioned(
+                  left: 64,
+                  right: 12,
+                  top: MediaQuery.paddingOf(context).top + 8,
+                  child: GpsStatusStrip(
+                    state: _gps.state,
+                    onAction: (a) => _runGpsAction(a, _gps),
+                  ),
                 ),
               // Panel infos en bas
               Positioned(
